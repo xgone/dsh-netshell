@@ -14,36 +14,15 @@
 - **命令历史**:底栏实时统计执行 / 拦截 / 放行次数,可展开查看带时间戳的完整历史
 - **AI 受控接入**:模型工具与人共用同一套 Guard,`deny` 直接拦截,`ask` 必须人工确认后才执行
 
-## 快速开始
+## 快速开始(动态加载形态)
 
-插件有**两种安装形态**:日常开发用「内存动态插件」(改代码即时生效),正式使用/分发用「Loader 静态包」(随 DSH 启动自动加载,无需手动激活)。两者由同一份源码生成,功能完全一致。
+将 `dev/nsh-host.js` 与 `dev/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH:改动即时生效、随进程消失,适合开发调试;每次重启后需重新加载激活。
 
-### 方式一:Loader 静态包(推荐,装一次永久生效)
+> **分支与合并**:本分支按**动态加载模式**使用。分支上同样保留打包文件(`package.json` / `lib/` / `scripts` 等),为的是与 `master` 的合并路径始终干净——**发布与打包相关改动请在 master 进行**,dev 上只改 `dev/` 源码与文档。面向使用者的 Loader 安装(master 形态):`dsh plugin --profile web add link:<本仓库路径>`。
 
-```sh
-# 本地目录安装(link 模式,改 dev/ 源码后 pnpm build 重新生成 lib/ 即生效)
-dsh plugin --profile web add link:/path/to/dsh-netshell
+加载成功后:侧栏底部出现一个「远程终端」圆形按钮,设置页出现「远程终端」分区。
 
-# 或安装已发布的 npm 包
-dsh plugin --profile web add @xgone/dsh-netshell
-```
-
-该命令会把包装进 profile(`~/.dsh/profiles/web`)并把 bundle 追加进 `dsh.profile.bundles`,下次启动 DSH 自动加载——侧栏底部出现「远程终端」按钮、设置页出现「远程终端」分区即成功。卸载:`dsh plugin --profile web remove @xgone/dsh-netshell`。
-
-也可以手动安装:在 profile 的 `package.json` 依赖里加 `"@xgone/dsh-netshell": "link:…"`,并在 `dsh.profile.bundles` 列表追加包名。
-
-### 方式二:内存动态插件(开发调试用)
-
-将 `dev/nsh-host.js` 与 `dev/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH。改动立即生效、随进程消失,适合迭代;每次重启后需重新加载激活。
-
-### 验证安装成功
-
-无论哪种方式,加载成功后:
-
-- 侧栏底部出现一个「远程终端」圆形按钮;
-- 设置页出现「远程终端」分区。
-
-### 下一步:添加服务器
+### 添加服务器
 
 打开 **设置 → 远程终端 → + 新增**:
 
