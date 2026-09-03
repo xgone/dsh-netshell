@@ -16,9 +16,9 @@
 
 ## 快速开始(动态加载形态)
 
-将 `dev/nsh-host.js` 与 `dev/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH:改动即时生效、随进程消失,适合开发调试;每次重启后需重新加载激活。
+将 `src/nsh-host.js` 与 `src/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH:改动即时生效、随进程消失,适合开发调试;每次重启后需重新加载激活。
 
-> **分支与合并**:本分支按**动态加载模式**使用。分支上同样保留打包文件(`package.json` / `lib/` / `scripts` 等),为的是与 `master` 的合并路径始终干净——**发布与打包相关改动请在 master 进行**,dev 上只改 `dev/` 源码与文档。面向使用者的 Loader 安装(master 形态):`dsh plugin --profile web add link:<本仓库路径>`。
+> **分支与合并**:本分支按**动态加载模式**使用。分支上同样保留打包文件(`package.json` / `lib/` / `scripts` 等),为的是与 `master` 的合并路径始终干净——**发布与打包相关改动请在 master 进行**,dev 上只改 `src/` 源码与文档。面向使用者的 Loader 安装(master 形态):`dsh plugin --profile web add link:<本仓库路径>`。
 
 加载成功后:侧栏底部出现一个「远程终端」圆形按钮,设置页出现「远程终端」分区。
 
@@ -61,7 +61,7 @@
 - **永久放行该命令**:写入该服务器的规则表(按原文精确匹配)后执行;
 - **拒绝**:丢弃该行并复位提示符,什么都不执行。
 
-内置规则示例(完整清单见 `dev/nsh-host.js` 中的 `BUILTIN_RULES`):
+内置规则示例(完整清单见 `src/nsh-host.js` 中的 `BUILTIN_RULES`):
 
 - `deny`(直接拦截,不可询问):`rm -rf /` 及根路径变体、`mkfs`、`dd of=/dev/*`、fork 炸弹、`chmod -R 777 /*`、覆写 `/dev/sd*` 等;
 - `ask`(拦下询问):`rm -rf`、`shutdown / reboot / halt / poweroff`、`drop database / drop table`、`git push --force`、`git reset --hard`、`iptables -F`、`crontab -r`、`apt/yum remove`、`docker system prune`、`kubectl delete` 等。
