@@ -1,0 +1,15 @@
+# NetShell bundle patch:one row — the plugin(host + browser halves)。
+#
+# 通过 profile 安装(bundles 列表由 `dsh plugin --profile <name> add` 自动维护):
+#   dsh plugin --profile web add link:/path/to/dsh-netshell   # 本地开发
+#   dsh plugin --profile web add @xgone/dsh-netshell          # 已发布版本
+#
+# config.routePath 是 Client→Host RPC 的唯一 POST 端点;`enabled: false`
+# 可整体停用(等价于把本行 disabled,保留是为了运行时开关语义一致)。
+
+- insert:
+    - id: netshell
+      name: '@xgone/dsh-netshell'
+      config:
+        enabled: true
+        routePath: /netshell/rpc

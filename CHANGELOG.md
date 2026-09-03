@@ -2,6 +2,29 @@
 
 本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.0] - 2026-09-03
+
+### 新增
+
+- **Loader 静态包形态**:仓库重构为可安装的 DSH bundle——`package.json` 声明 `dsh.client` + `dsh.bundle.patch`,`cordis.patch.yml` 提供 loader 行;`dsh plugin --profile web add link:<路径>`(或包名)即可随 DSH 启动自动加载,不再需要每次手动激活动态插件。
+- **单源双模式构建**:`dev/nsh-host.js` + `dev/nsh-client.js` 为唯一源码(动态沙箱函数体风格保持不变),`scripts/build.mjs` 生成 `lib/index.js`(宿主:harness shim → `@deepseek-ai/dsh-tools` 工具注册 + `/netshell/rpc` JSON 分发路由)与 `lib/client.js`(浏览器:`window.__ModuleLoader__` 工厂 + `host.call`/`styles.insert`/`ctx.timer` shim);业务逻辑零分叉。
+- **静态模式安全说明**:浏览器→宿主 RPC 走自注册 HTTP 路由,与 `/api` 平面同级受部署侧认证门控;客户端不使用 `eval`/`new Function`。
+- **端到端冒烟测试**(`test/smoke.mjs`,12 项断言):桩服务驱动两个生成半区,覆盖 harness shim、工具注册、RPC 分发(200/404/405/500)、slot 装配与样式注入;`pnpm test` = build + check + smoke。
+
+### 变更
+
+- `nsh-host.js` / `nsh-client.js` 迁移至 `dev/`(动态加载形态的文件名变化;内容即唯一源码)。动态插件用法不受影响。
+
+## [0.1.1] - 2026-09-03
+
+### 安全
+
+- **known_hosts 改为插件私有文件**(对齐 DESIGN §2.1):主机指纹只记录在 `~/.dsh/netshell/known_hosts`(目录 0700、文件 0600,连接时自动创建),不再写入用户 `~/.ssh/known_hosts`,插件学到的指纹与手工 SSH 互不污染、互不牵连;交互终端与模型工具(`ssh -T`)两条路径均生效。注意:升级前通过插件连接过的主机会在新文件里重新走一次首连记录(`accept-new` 自动完成),旧指纹仍保留在 `~/.ssh/known_hosts` 不受影响。
+
+### 新增
+
+- 连接失败诊断新增「主机密钥校验失败」提示(指纹变更 / 验证失败),并说明善后方法(`ssh-keygen -R <主机> -f ~/.dsh/netshell/known_hosts`)。
+
 ## [0.1.0] - 2026-09-03
 
 首个可用版本:P1 核心闭环 + 模型工具。

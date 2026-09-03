@@ -15,17 +15,38 @@
 2. RPC 方法名与 payload 是 Client / Host 两个半区之间的契约,改名必须两侧同步(§5);
 3. Guard 求值顺序(§6)与「密码不出 Host」是安全边界,任何重构不得弱化。
 
-## 2. 文件结构
+## 2. 文件结构与双模式架构
+
+> **分支模型**:`master` 承载完整打包形态(本节描述的全部文件);`dev` 只保留 `dev/` 源码 + 文档,用于动态加载开发,打包层以 master 为准。
+
+本插件有**两种安装形态**,由**同一份源码**(`dev/` 目录)驱动:
 
 | 文件 | 说明 |
 |------|------|
-| `nsh-host.js` | Host 半区(约 780 行):SSH 会话管理、Guard 引擎、凭据读写、RPC handlers、模型工具注册 |
-| `nsh-client.js` | Client 半区(约 134 行,长行):浮动终端面板、设置页、ANSI 渲染、轮询 |
+| `dev/nsh-host.js` | **源码 · 宿主半区**:SSH 会话管理、Guard 引擎、凭据读写、RPC handlers、模型工具(动态沙箱函数体风格,ES5) |
+| `dev/nsh-client.js` | **源码 · 浏览器半区**:浮动终端面板、设置页、ANSI 渲染、轮询(同上) |
+| `scripts/build.mjs` | 构建:把 `dev/` 源码内联进 `lib/` 两个半区(`pnpm build`) |
+| `lib/index.js` | 生成物 · Loader 静态宿主半区(真实 Node ESM + harness shim + `/netshell/rpc` 分发) |
+| `lib/client.js` | 生成物 · Loader 静态浏览器半区(`window.__ModuleLoader__` 工厂 + builtin shim) |
+| `cordis.patch.yml` | bundle 补丁:loader 树的 `netshell` 行 |
+| `test/smoke.mjs` | 端到端冒烟:桩服务驱动两个生成半区 + 真实 HTTP RPC(12 项断言) |
 | `DESIGN.zh.md` | 设计方案,§9 的宿主契约调研仍有效 |
 | `TECHNICAL.md` | 本文 |
 | `CHANGELOG.md` | 更新记录 |
 
-两个 js 文件均以 `return { inject: [...], apply(ctx) { … } }` 结尾,即 Cordis 动态插件定义,分别在 DSH 的 Host 进程与浏览器 Client 中加载。
+两个 `dev/` 源文件均以 `var …; return { inject: [...], apply(ctx) { … } }` 结尾——这是**动态沙箱的函数体求值**格式;`build.mjs` 把整份源码原样内联进一个 IIFE,因此业务逻辑只有一份,模式差异全部收敛在生成物的 shim 里:
+
+| 动态沙箱 builtin | 静态模式落点(lib/index.js / lib/client.js) |
+|------|------|
+| `harness.handle(method, fn)` | 内存 handler 表 + 单一 `POST /netshell/rpc` JSON 分发(webServer 路由) |
+| `harness.defineTool(def)` | `@deepseek-ai/dsh-tools` 的 `defineTool`(参数 schema 归一化) |
+| `harness.registerTool(ctx, t)` | `ctx.tools.register(t)` |
+| 客户端 `host.call(method, args)` | `fetch('/netshell/rpc')`(与宿主同一分发端点) |
+| 客户端 `styles.insert(css)` | `<style>` 注入 `document.head` |
+| 客户端 `ctx.timer` | 客户端无 timer 服务,包装层以 `setInterval/setTimeout` 增广 ctx |
+| 服务名 `subprocess` / `credentials` / `timer` | 同名——静态 loader 的 base bundle 提供同名服务(`@deepseek-ai/dsh-subprocess-local` / `dsh-credentials-local` / `cordis-plugin-timer`),inject 直接声明 |
+
+**改代码只改 `dev/`,然后 `pnpm test`**(build + check + smoke)。`lib/` 是生成物但入库提交,保证 git clone / link 安装零构建步骤。
 
 ## 3. 运行环境与宿主契约
 
@@ -49,6 +70,7 @@
 | 服务器档案 + 等级 + 规则 | 凭据记录 `netshell/profiles`(常量 `PKEY`)| `kind: 'grant'`,payload `{ version: 1, servers: [...] }` |
 | 密码 | 每服务器一条,ref 由 `refFor(id)` 生成:`NETSHELL_PW_<id 去掉非字母数字后大写>` | `credentials.set(ref, password)` |
 | 运行时会话 | Host 进程内存 `Map` | 插件停止 / DSH 重启即清空(会话本就不跨进程) |
+| 主机指纹(known_hosts) | 插件私有文件 `~/.dsh/netshell/known_hosts` | 普通文件 0600 / 目录 0700,由 ssh 维护;0.1.1 起,与 `~/.ssh/known_hosts` 隔离 |
 
 server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent', keyPath?, level: 'open'|'guarded'|'locked', rules: [{ pattern, action: 'allow'|'ask'|'deny', note? }], createdAt }`。
 
@@ -111,7 +133,8 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 
 1. `resolveExecutable('ssh')` 定位二进制;
 2. `auth: 'password'` 时:`credentials.resolve(ref)` 取密码 → `makeAskpass` 写 askpass 脚本;
-3. `spawnTerminal` 拉起 `ssh -tt -o StrictHostKeyChecking=accept-new -o NumberOfPasswordPrompts=1 -o ServerAliveInterval=15 -o ConnectTimeout=12 …`(agent 加 `BatchMode=yes`;key 加 `-i <keyPath> -o IdentitiesOnly=yes`);
+3. `spawnTerminal` 拉起 `ssh -tt -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<私有文件> -o NumberOfPasswordPrompts=1 -o ServerAliveInterval=15 -o ConnectTimeout=12 …`(agent 加 `BatchMode=yes`;key 加 `-i <keyPath> -o IdentitiesOnly=yes`);
+   - **私有 known_hosts**(`knownHostsFile()`):首次调用经 `/bin/sh` 创建 `~/.dsh/netshell/known_hosts`(目录 0700、文件 0600,幂等)并缓存路径,失败可重试、失败则本次连接报错;插件学到的指纹不落入用户 `~/.ssh/known_hosts`,互不污染; BSD 工具链(macOS)的 `chmod` 不支持 `--` 分隔符,脚本里不要加;
 4. 异步消费输出流写 `onOutput`(检测错误特征设置中文 `hint`);首个输出块即置 `status: 'live'`;
 5. 退出时 `onExit` 记录 `closedReason` 并删除 askpass 脚本。
 
@@ -135,7 +158,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 - **`netshell_servers`**:无参数,读 `PKEY` 返回 `{ servers: [{ id, name, host, port, user, auth, level }] }`;
 - **`netshell_run`**:参数 `server`(必填)、`command`(必填)、`timeoutMs`(默认 30000)。执行流(`toolRunExecute`):
   1. `resolveServer` → `ensureSession`(**复用或新建交互 PTY 会话**,与面板共享,waitLive 最长 20s);
-  2. Guard 评估:`deny` → 直接返回 blocked;`allow` → `runRemote`(`ssh -T … <cmd>` 独立一次性执行,stdout 上限 200K/spill 400K);
+  2. Guard 评估:`deny` → 直接返回 blocked;`allow` → `runRemote`(`ssh -T … <cmd>` 独立一次性执行,同样使用私有 known_hosts;stdout 上限 200K/spill 400K);
   3. `ask` → 把命令写入共享会话的行缓冲(**面板可见**)并置 pending,`waitPendingGone` 轮询等待用户在面板裁决,**最长 600s**;超时 / 中止 / 拒绝均返回 blocked;放行后走 `runRemote`;
   4. 结果(stdout/stderr/exitCode)与 `$ <cmd>` 一起**回写共享会话的 `outAll` 与事件流**,面板全程可见模型做了什么。
 
@@ -162,7 +185,6 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 |------|------|
 | RPC 命名 `netshell.servers.*`、`sessionId` / `cursor` 增量拉取 | `netshell.profiles.*`、`id`、全量快照 poll |
 | 拦截询问走宿主 `userQuestions.ask()` | 自实现 pending + 面板横幅 + `netshell.decide`,不依赖 userQuestions |
-| 插件私有 known_hosts(`~/.dsh/netshell/`)| 未做,直接用默认 `~/.ssh/known_hosts` + `accept-new` |
 | 连接前探测 `ssh -V` 并降级 | 未做 |
 | 规则匹配做 shell 词法切分 | 仅原始串匹配 + sudo 类前缀剥离 |
 | 模型工具是 P3 可选项 | 已随首版交付(`netshell_servers` / `netshell_run`)|
@@ -171,7 +193,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 
 - **护栏非沙箱**:匹配对象是原始命令串,base64 / 变量间接 / heredoc 等可绕过;`locked` + `allow` 白名单是唯一强约束,文档需持续向用户明示;
 - `atPwPrompt` 是启发式:远端提示语不含 `password:` 时(如自定义 PAM 提示),密码回车可能落入评估路径,通常无副作用但会记一条历史;
-- host key 变更时由 ssh 自身拒绝连接,插件只透传错误信息;
+- host key 变更时由 ssh 自身拒绝连接(指纹记在私有 `~/.dsh/netshell/known_hosts`),`onOutput` 识别特征文案给出中文 hint 与善后指引;
 - 模型路径的 `waitPendingGone` / `waitLive` 是 120–150ms 轮询,非事件驱动(可接受,但不优雅)。
 
 ## 9. Client 实现速览
@@ -185,17 +207,26 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 
 改代码前过一遍:
 
+- [ ] 只改 `dev/` 源码,改完 `pnpm test`(build + check + smoke),提交时包含重新生成的 `lib/`;
 - [ ] 新对象要进 credentials payload?→ 必须宿主 realm 出身(§8.1);
-- [ ] 动了 RPC 名 / payload?→ `nsh-client.js` 与 `nsh-host.js` 两侧同步 + 更新本文 §5;
+- [ ] 动了 RPC 名 / payload?→ `dev/nsh-client.js` 与 `dev/nsh-host.js` 两侧同步 + 更新本文 §5;
 - [ ] 动了 Guard 求值顺序或内置规则?→ 更新 §6、README「权限等级」、CHANGELOG;
 - [ ] 动了 askpass / 凭据路径?→ 确认密码不出现在任何 RPC 返回、console、`outAll`;
 - [ ] 新增用户可见行为?→ README + CHANGELOG 同步;
-- [ ] 新增子资源(临时文件、子进程)?→ 在 `onExit` 与 `ctx.effect` dispose 中回收。
+- [ ] 新增子资源(临时文件、子进程)?→ 在 `onExit` 与 `ctx.effect` dispose 中回收;
+- [ ] 动态源码保持 ES5 函数体风格(顶层 `var` + `return { inject, apply }`),不要引入 `import`/`export`/模板字符串——两种模式都靠「函数体原样内联」。
 
-## 11. 路线图(DESIGN 分期 + 本文暴露的技术债)
+## 11. 安装与打包(loader 静态包)
+
+- **包形态**:`package.json` 声明 `exports["./client"]` + `dsh.client`(`platform: web`)+ `dsh.bundle.patch` —— 这是 DSH client-modules 系统扫描浏览器半区、以及 profile launcher 识别 bundle 的契约(参照:`@deepseek-ai/dsh-client-modules` 的扫描逻辑与本仓库 cordis.patch.yml)。注意 `dsh.client.inject` 的语义是**依赖的 client 包名**(模块表到达顺序边),而模块自身 `export const inject = [...]` 是**服务名**——两层不要混淆;本包前者为 `[]`(slots/react 由既有启动图提供)。
+- **安装**:本机 profile 是 `~/.dsh/profiles/web`(pnpm workspace,patch 层为其中的 `cordis.patch.yml`)。`dsh plugin --profile web add link:<路径>` 会 pnpm 安装并自动把 bundle 追加进 `dsh.profile.bundles`(透明转发 pnpm + 按安装状态对账);模块解析是双锚(先 dsh 安装目录、后 profile 目录)。
+- **宿主半区服务**:`inject: ['subprocess', 'credentials', 'timer', 'tools', 'webServer']`(base bundle 提供同名服务行);RPC 走自注册 HTTP 路由(与 `@xgone/dsh-remote` 同一模式,auth gate 覆盖所有已注册及后注册路由)。**有意未走** `/api` 通用平面:`namespace/<method>` 派发要求宿主半区 `TypertRemoteService` + `@Remote` 标记,且浏览器半区必须挂载 `@deepseek-ai/dsh-typert-generator` 生成的严格 codec 描述符(`./remote` 产物 + `ctx.remote.$mount`)—— machinery 过重,对本插件的 9 个 JSON RPC 不划算;若未来需要流式/强 schema,再迁。
+- **浏览器半区**:工厂形式 `window.__ModuleLoader__.load({ id, factory(require) })`,依赖经 `require('react')` 注入;不使用 `eval`/`new Function`,源码以真实代码内联(无 CSP 风险)。
+
+## 12. 路线图(DESIGN 分期 + 本文暴露的技术债)
 
 - 增量 poll:启用 `nextCursor` 游标,减少带宽与面板 re-render;
 - 工具命令走交互 PTY:复活 `runOnSession`,让 `netshell_run` 真实回显交互(当前 allow 路径是独立 `ssh -T`);
-- 私有 known_hosts、`ssh -V` 探测与降级提示(补齐 DESIGN §8 风险对策);
+- `ssh -V` 探测与降级提示(补齐 DESIGN §8 风险对策);
 - `resize`、跳板机 ProxyJump、完整 ANSI 光标重放(全屏 TUI);
 - `terminals.registerBackend` 受控接入(显式开关)、清理或落地 §8.2 的预留代码。

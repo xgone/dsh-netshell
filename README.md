@@ -2,6 +2,8 @@
 
 在 DSH 界面里直接操作远程服务器的 SSH 终端:右下角浮动终端面板、危险命令拦截确认、密码存入 DSH 加密凭据库且**完全不经过 AI 会话**。内置两个模型工具(`netshell_servers` / `netshell_run`),AI 可以帮你执行远程命令,但每一条都要经过与人工输入相同的权限护栏。
 
+> **分支说明**:`master` = Loader 静态包(推荐,装一次永久生效);`dev` = 动态加载形态(开发调试,改动即时生效)。两种形态由同一份源码生成,功能一致。
+
 ## 功能一览
 
 - **服务器档案管理**:名称 / 主机 / 端口 / 用户名,支持密码、私钥、ssh-agent 三种认证方式
@@ -14,14 +16,34 @@
 
 ## 快速开始
 
-### 1. 安装插件
+插件有**两种安装形态**:日常开发用「内存动态插件」(改代码即时生效),正式使用/分发用「Loader 静态包」(随 DSH 启动自动加载,无需手动激活)。两者由同一份源码生成,功能完全一致。
 
-本仓库即插件本体,没有构建步骤。将 `nsh-host.js` 与 `nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH。加载成功后:
+### 方式一:Loader 静态包(推荐,装一次永久生效)
+
+```sh
+# 本地目录安装(link 模式,改 dev/ 源码后 pnpm build 重新生成 lib/ 即生效)
+dsh plugin --profile web add link:/path/to/dsh-netshell
+
+# 或安装已发布的 npm 包
+dsh plugin --profile web add @xgone/dsh-netshell
+```
+
+该命令会把包装进 profile(`~/.dsh/profiles/web`)并把 bundle 追加进 `dsh.profile.bundles`,下次启动 DSH 自动加载——侧栏底部出现「远程终端」按钮、设置页出现「远程终端」分区即成功。卸载:`dsh plugin --profile web remove @xgone/dsh-netshell`。
+
+也可以手动安装:在 profile 的 `package.json` 依赖里加 `"@xgone/dsh-netshell": "link:…"`,并在 `dsh.profile.bundles` 列表追加包名。
+
+### 方式二:内存动态插件(开发调试用)
+
+将 `dev/nsh-host.js` 与 `dev/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH。改动立即生效、随进程消失,适合迭代;每次重启后需重新加载激活。
+
+### 验证安装成功
+
+无论哪种方式,加载成功后:
 
 - 侧栏底部出现一个「远程终端」圆形按钮;
 - 设置页出现「远程终端」分区。
 
-### 2. 添加服务器
+### 下一步:添加服务器
 
 打开 **设置 → 远程终端 → + 新增**:
 
@@ -34,7 +56,7 @@
 4. 可选:添加**服务器规则**,优先级高于内置规则库;
 5. 保存。已设置密码的服务器再次编辑时,密码框留空表示「保持不变」,也可勾选「清除已存密码」。
 
-### 3. 连接
+### 连接
 
 - 点击侧栏「远程终端」按钮,在服务器列表点「连接」;或在设置页直接点「连接」;
 - 每次连接都会开一个新会话,面板顶部 chip 可切换,彩色圆点表示状态(绿 = 在线,黄 = 连接中,红 = 已结束);
@@ -60,7 +82,7 @@
 - **永久放行该命令**:写入该服务器的规则表(按原文精确匹配)后执行;
 - **拒绝**:丢弃该行并复位提示符,什么都不执行。
 
-内置规则示例(完整清单见 `nsh-host.js` 中的 `BUILTIN_RULES`):
+内置规则示例(完整清单见 `dev/nsh-host.js` 中的 `BUILTIN_RULES`):
 
 - `deny`(直接拦截,不可询问):`rm -rf /` 及根路径变体、`mkfs`、`dd of=/dev/*`、fork 炸弹、`chmod -R 777 /*`、覆写 `/dev/sd*` 等;
 - `ask`(拦下询问):`rm -rf`、`shutdown / reboot / halt / poweroff`、`drop database / drop table`、`git push --force`、`git reset --hard`、`iptables -F`、`crontab -r`、`apt/yum remove`、`docker system prune`、`kubectl delete` 等。
@@ -93,6 +115,7 @@
 | 服务器档案、权限等级、规则 | DSH 加密凭据库中的 `netshell/profiles` 记录 |
 | 密码 | 每台服务器一条独立凭据记录(`NETSHELL_PW_<服务器ID>`) |
 | 终端会话 | 插件进程内存(DSH 重启后会话断开,档案与密码不受影响) |
+| 主机指纹(known_hosts) | 插件私有文件 `~/.dsh/netshell/known_hosts`,不写入手工 ssh 的 `~/.ssh/known_hosts` |
 
 这样做的好处:加密落盘由宿主统一负责(权限 0600),备份 DSH 即备份全部配置,且密码天然隔离于 AI 会话之外。技术细节见 [TECHNICAL.md](TECHNICAL.md) 第 4 节。
 
@@ -102,7 +125,7 @@
 
 **密码认证方式连不上?** 密码注入依赖 OpenSSH ≥ 8.4 的 askpass 机制(macOS 自带版本满足);私钥 / agent 认证无此要求。
 
-**首次连接要不要确认主机指纹?** 采用 `accept-new` 策略:新主机自动接受;若指纹与之前不同(可能中间人),SSH 会拒绝连接,此时检查并清理本机 `~/.ssh/known_hosts` 中的对应条目后重试。
+**首次连接要不要确认主机指纹?** 采用 `accept-new` 策略:新主机自动接受,指纹记录在**插件私有**的 `~/.dsh/netshell/known_hosts`(目录 0700 / 文件 0600),与手工 ssh 的 `~/.ssh/known_hosts` 互不影响;若指纹与已记录的不同(可能服务器重装,也可能被劫持),SSH 会拒绝连接,确认是重装后执行 `ssh-keygen -R <主机> -f ~/.dsh/netshell/known_hosts` 清除旧指纹再试。
 
 **输出太多会丢吗?** 有界缓冲:宿主保留最近 160K 字符,面板保留最近 1200 行,超出部分显示「… 已省略较早的 N 行输出」。
 
