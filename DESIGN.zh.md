@@ -1,6 +1,6 @@
 # NetShell — DSH 远程终端插件 设计方案
 
-> 状态:设计评审中(未实现)
+> 状态:**P1 已实现**(使用说明见 [README.md](README.md),实现细节与本文差异见 [TECHNICAL.md](TECHNICAL.md) §8.3,变更记录见 [CHANGELOG.md](CHANGELOG.md))
 > 结论来源:已搜索 DSH 代码库与运行时服务目录,确认**不存在**现成远程终端插件;本方案基于运行时已确认的真实宿主契约设计。
 
 ## 1. 目标
