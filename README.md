@@ -18,6 +18,8 @@
 
 将 `src/nsh-host.js` 与 `src/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH:改动即时生效、随进程消失,适合开发调试;每次重启后需重新加载激活。
 
+> **新会话 / AI Agent 请先读 [DYNAMIC.md](DYNAMIC.md)**——完整的动态加载操作手册:精确的调用序列、参数模板、激活前逐字节校验方法,以及全部踩坑记录(idPrefix 限制、超长行截断、必须两个半区同包内联等)。照做即可一次加载成功。
+
 > **分支与合并**:本分支按**动态加载模式**使用。分支上同样保留打包文件(`package.json` / `lib/` / `scripts` 等),为的是与 `master` 的合并路径始终干净——**发布与打包相关改动请在 master 进行**,dev 上只改 `src/` 源码与文档。面向使用者的 Loader 安装(master 形态):`dsh plugin --profile web add link:<本仓库路径>`。
 
 加载成功后:侧栏底部出现一个「远程终端」圆形按钮,设置页出现「远程终端」分区。
@@ -115,6 +117,7 @@
 | 文档 | 读者 |
 |------|------|
 | [README.md](README.md)(本文) | 使用者 |
+| [DYNAMIC.md](DYNAMIC.md) | 新会话 / AI agent,动态加载操作手册(免试错) |
 | [CHANGELOG.md](CHANGELOG.md) | 所有人,版本变更记录 |
 | [TECHNICAL.md](TECHNICAL.md) | 开发者 / AI agent,架构与实现细节 |
 | [DESIGN.zh.md](DESIGN.zh.md) | 原始设计方案与 DSH 宿主契约调研 |
