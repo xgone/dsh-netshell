@@ -30,6 +30,12 @@ const PACKAGE_ID = '@xgone/dsh-netshell'
 
 for (const [name, src] of [['src/nsh-host.js', hostSource], ['src/nsh-client.js', clientSource]]) {
   if (src.includes('`')) throw new Error(`${name} 含反引号——动态源码约定为 ES5 字符串拼接,请保持`)
+  // 单行长度守卫:2000 是 read 工具的截断线,超长行会让 AI agent 无法整读源码
+  // (DYNAMIC.md 曾为此记录过整套分段拼接流程;0.3.0 起源码全文件多行化,此守卫防回归)。
+  const longLines = src.split('\n').map((line, i) => [i + 1, line.length]).filter(([, n]) => n >= 2000)
+  if (longLines.length > 0) {
+    throw new Error(`${name} 存在 ≥2000 字符的行(会被 read 截断): ${longLines.map(([n, len]) => `L${n}(${len})`).join(', ')};请拆分为多行。`)
+  }
   try {
     // 源码是函数体(顶层 return 合法),node --check 不适用;new Function 等价校验语法
     new Function(src)

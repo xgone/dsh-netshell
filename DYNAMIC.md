@@ -10,10 +10,10 @@
 | 半区 | 文件 | 自由变量(沙箱 builtin,勿传参) | inject 依赖 | 返回 |
 |------|------|------|------|------|
 | Host | `src/nsh-host.js`(约 816 行) | `harness` | `['subprocess', 'credentials', 'timer']` | `{ inject, apply }` |
-| Client | `src/nsh-client.js`(约 134 行) | `React`、`host`、`styles` | `['timer']`,内部 `ctx.get('slots')` | `{ inject, apply }` |
+| Client | `src/nsh-client.js`(约 700 行,0.3.0 起全文件多行化) | `React`、`host`、`styles` | `['timer']`,内部 `ctx.get('slots')` | `{ inject, apply }` |
 
 - Host 通过 `harness.handle(...)` 注册 7 个 Client→Host RPC(`netshell.profiles.list/save/delete`、`netshell.connect`、`netshell.sessions.list`、`netshell.input`、`netshell.poll`、`netshell.decide`、`netshell.disconnect`),并用 `harness.defineTool` + `harness.registerTool(ctx, t)` 注册两个模型工具。
-- Client 注册三个 Slot:`sidebar.footer.action`(id `netshell`, order 30)、`shell.overlay`(id `netshell-panel`, order 10)、`settings.section`(id `netshell`, order 50)。
+- Client 注册两个 Slot:`conversation.view`(id `netshell`, order 20,主区域「远程终端」Tab,「对话 / 轨迹」右侧)、`settings.section`(id `netshell`, order 50)。
 - **不要**用静态包 `lib/index.js` / `lib/client.js` 做动态加载——那是带 shim 的 ESM 生成物,动态沙箱不认 `import`。
 
 ## 1. 操作序列(按顺序执行)
@@ -33,7 +33,7 @@
 {
   "plugin": { "kind": "new", "idPrefix": "nsh" },
   "name": "NetShell 远程终端",
-  "purpose": "加载 dsh-netshell 的动态插件形态:右下角浮动 SSH 终端面板、危险命令护栏、设置页服务器档案管理,以及 netshell_servers / netshell_run 两个模型工具。",
+  "purpose": "加载 dsh-netshell 的动态插件形态:主区域「远程终端」Tab(左会话列表 + 右终端分栏)、危险命令护栏、设置页服务器档案管理,以及 netshell_servers / netshell_run 两个模型工具。",
   "code": { "host": "<src/nsh-host.js 全文>", "client": "<src/nsh-client.js 全文>" }
 }
 ```
@@ -46,17 +46,7 @@
 
 ## 2. 踩坑清单(每一条都真实踩过)
 
-1. **read 工具会截断超 2000 字符的行**。`src/nsh-client.js` 的第 6(CSS)、129、132、133 行都是 2000+ 字符,直接 read 会拿到截断版,照抄必炸。用 bash 分段取全文:
-   ```bash
-   python3 - <<'EOF'
-   lines = open('src/nsh-client.js', encoding='utf-8').read().split('\n')
-   for n in (6, 129, 132, 133):
-       s = lines[n-1]
-       for i in range(0, len(s), 800):
-           print(f'[chunk {i//800}]>{s[i:i+800]}<')
-   EOF
-   ```
-   取完 chunk 后**无缝拼接**(标记 `> <` 之间是精确边界)。拼完可用 `awk '{print NR": "length($0)}' src/nsh-client.js` 对照每行长度。
+1. **超长行截断(历史坑,0.3.0 起已消除)**。read 工具会截断超 2000 字符的行,旧版 client 的 CSS / ServerEditor / SettingsPage 都是数千字符的单行,当时只能用 bash 分段取再无缝拼接。现在源码全文件多行化,任何一行都短于 2000 字符(`scripts/build.mjs` 有硬校验,≥2000 直接构建失败),read 工具可整读,两个半区都能直接照 read 内容转录,不再需要分段拼接。若未来改出超长行,build 会指明行号。
 2. **idPrefix 必须是 3–6 个小写英文字母**。`netshell`(8 个)会被拒;用 `nsh`。
 3. **一次 define 包含两个半区**,且各参数独立传,不要把 name/purpose 塞进 code(会被当成 code 的多余属性拒绝)。
 4. **逐字节一致是硬要求**,凭印象改写必错。本次实际踩中的三处:
@@ -68,6 +58,7 @@
 7. **每个新 packageId 都需要 UI 批准**(单勾只授权当前包)。批准前 run 返回 `awaiting-approval` 属正常,**不要重试,等用户点击**;用户拒绝后不要再发。
 8. **失败后的修复路径**:技术失败(如 client-half-failed)→ 用 `cordis_inspect_self(pluginId, packageId)` 读存储的源码定位差异 → 在**同一插件**下 define 新包 → 重新 run。坏掉的废弃插件用 `cordis_undefine` 清理,正在用的用 `cordis_stop` 临时停用。
 9. **客户端 Slot 查询**(Slots.listSubTree)在本环境可能报 `"input" must be an object`(传输层问题),不必纠结——本插件三个 Slot 的注册协议以本文档 §0 为准,源码即事实。
+10. **动态注册的 `order` 会被 runner guard 覆盖(0.4.0 配套 harness 修复)**。cordis-client-runner 的 `guardedSlots` 曾对所有非 chain 注册强制 `priority = allocatePriority()`(递减,后注册排前),而槽位排序是 priority 优先、`order` 兜底——结果是动态插件传的 `order` 完全失效,注册项被钉在列表最前(0.4.0 前本插件 Tab 因此显示在最左)。已在上游 guard 中豁免 list 类槽位(list 保留文档化 `order` 语义;single/keyed shadowing 与 chain 选举不变),并重新构建了 web 产物。判断这类「顺序不生效」问题别先怀疑自己的 `order` 值——先看 guard 有没有注入 priority。
 
 ## 3. 激活前校验(强烈建议,能省一轮失败)
 
@@ -93,7 +84,7 @@ EOF
 
 - `cordis_inspect_self(pluginId)`:`state` 为 `running`,`currentPackageId` 等于刚激活的包;
 - `Tool.listTools`(host)出现 `netshell_servers` / `netshell_run`;
-- 界面:侧栏底部「远程终端」圆形按钮 + 设置 → 远程终端 分区。
+- 界面:主区域「对话 / 轨迹」右侧出现「远程终端」Tab(需当前有非空会话才显示 Tab 栏)+ 设置 → 远程终端 分区。
 
 ## 5. 生命周期提醒
 

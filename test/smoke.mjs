@@ -93,7 +93,7 @@ const clientCtx = {
   effect(fn) { const d = fn(); clientEffects.push(d); return () => { if (typeof d === 'function') d() } },
 }
 clientPlugin.apply(clientCtx)
-ok(registrations.map(r => r.slotName).join(',') === 'sidebar.footer.action,shell.overlay,settings.section', '三个 slot 已注册(入口/浮层/设置页)')
+ok(registrations.map(r => r.slotName).join(',') === 'conversation.view,settings.section', '两个 slot 已注册(主区 Tab/设置页)')
 ok(insertedStyles.length === 1 && insertedStyles[0].textContent.includes('.nsh-root'), '样式已注入')
 
 // 清理:客户端 150ms 轮询 interval 的 disposer 生效(进程可退出)

@@ -24,7 +24,7 @@
 | 文件 | 说明 |
 |------|------|
 | `src/nsh-host.js` | **源码 · 宿主半区**:SSH 会话管理、Guard 引擎、凭据读写、RPC handlers、模型工具(动态沙箱函数体风格,ES5) |
-| `src/nsh-client.js` | **源码 · 浏览器半区**:浮动终端面板、设置页、ANSI 渲染、轮询(同上) |
+| `src/nsh-client.js` | **源码 · 浏览器半区**:主区域终端 Tab(conversation.view)、设置页、ANSI 渲染、轮询(同上) |
 | `scripts/build.mjs` | 构建:把 `src/` 源码内联进 `lib/` 两个半区(`pnpm build`) |
 | `lib/index.js` | 生成物 · Loader 静态宿主半区(真实 Node ESM + harness shim + `/netshell/rpc` 分发) |
 | `lib/client.js` | 生成物 · Loader 静态浏览器半区(`window.__ModuleLoader__` 工厂 + builtin shim) |
@@ -58,7 +58,7 @@
   - `credentials.readRecord / modifyRecord / describe / resolve / set / unset`:档案与密码的持久化(§4);
   - `harness.handle(method, fn)`:注册 RPC;`harness.defineTool` + `harness.registerTool`:注册模型工具;
   - `timer.timeout / interval`:轮询与等待。
-- **Client** 可用:`React`(代码风格为 `var x = React.useState(...)` 解构前写法)、`host.call`、`styles.insert`、`ctx.get('slots')`、`console`;slots:`shell.overlay`(面板)、`sidebar.footer.action`(入口)、`settings.section`(设置页)。
+- **Client** 可用:`React`(代码风格为 `var x = React.useState(...)` 解构前写法)、`host.call`、`styles.insert`、`ctx.get('slots')`、`console`;slots:`conversation.view`(主区域 Tab,list-kind,`data-conversation-composer-overlay` 定高模式)、`settings.section`(设置页)。
 - 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现。
 
 ## 4. 数据与持久化(为什么没有配置文件)
