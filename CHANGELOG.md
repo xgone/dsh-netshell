@@ -7,13 +7,13 @@
 ### 新增
 
 - **Loader 静态包形态**:仓库重构为可安装的 DSH bundle——`package.json` 声明 `dsh.client` + `dsh.bundle.patch`,`cordis.patch.yml` 提供 loader 行;`dsh plugin --profile web add link:<路径>`(或包名)即可随 DSH 启动自动加载,不再需要每次手动激活动态插件。
-- **单源双模式构建**:`dev/nsh-host.js` + `dev/nsh-client.js` 为唯一源码(动态沙箱函数体风格保持不变),`scripts/build.mjs` 生成 `lib/index.js`(宿主:harness shim → `@deepseek-ai/dsh-tools` 工具注册 + `/netshell/rpc` JSON 分发路由)与 `lib/client.js`(浏览器:`window.__ModuleLoader__` 工厂 + `host.call`/`styles.insert`/`ctx.timer` shim);业务逻辑零分叉。
+- **单源双模式构建**:`src/nsh-host.js` + `src/nsh-client.js` 为唯一源码(动态沙箱函数体风格保持不变),`scripts/build.mjs` 生成 `lib/index.js`(宿主:harness shim → `@deepseek-ai/dsh-tools` 工具注册 + `/netshell/rpc` JSON 分发路由)与 `lib/client.js`(浏览器:`window.__ModuleLoader__` 工厂 + `host.call`/`styles.insert`/`ctx.timer` shim);业务逻辑零分叉。
 - **静态模式安全说明**:浏览器→宿主 RPC 走自注册 HTTP 路由,与 `/api` 平面同级受部署侧认证门控;客户端不使用 `eval`/`new Function`。
 - **端到端冒烟测试**(`test/smoke.mjs`,12 项断言):桩服务驱动两个生成半区,覆盖 harness shim、工具注册、RPC 分发(200/404/405/500)、slot 装配与样式注入;`pnpm test` = build + check + smoke。
 
 ### 变更
 
-- `nsh-host.js` / `nsh-client.js` 迁移至 `dev/`(动态加载形态的文件名变化;内容即唯一源码)。动态插件用法不受影响。
+- `nsh-host.js` / `nsh-client.js` 迁移至 `src/`(动态加载形态的文件名变化;内容即唯一源码)。动态插件用法不受影响。
 
 ## [0.1.1] - 2026-09-03
 

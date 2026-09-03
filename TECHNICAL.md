@@ -17,15 +17,15 @@
 
 ## 2. 文件结构与双模式架构
 
-> **分支模型**:`master` 承载完整打包形态(本节描述的全部文件);`dev` 只保留 `dev/` 源码 + 文档,用于动态加载开发,打包层以 master 为准。
+> **分支模型**:`master` 承载完整打包形态(本节描述的全部文件);`dev` 只保留 `src/` 源码 + 文档,用于动态加载开发,打包层以 master 为准。
 
-本插件有**两种安装形态**,由**同一份源码**(`dev/` 目录)驱动:
+本插件有**两种安装形态**,由**同一份源码**(`src/` 目录)驱动:
 
 | 文件 | 说明 |
 |------|------|
-| `dev/nsh-host.js` | **源码 · 宿主半区**:SSH 会话管理、Guard 引擎、凭据读写、RPC handlers、模型工具(动态沙箱函数体风格,ES5) |
-| `dev/nsh-client.js` | **源码 · 浏览器半区**:浮动终端面板、设置页、ANSI 渲染、轮询(同上) |
-| `scripts/build.mjs` | 构建:把 `dev/` 源码内联进 `lib/` 两个半区(`pnpm build`) |
+| `src/nsh-host.js` | **源码 · 宿主半区**:SSH 会话管理、Guard 引擎、凭据读写、RPC handlers、模型工具(动态沙箱函数体风格,ES5) |
+| `src/nsh-client.js` | **源码 · 浏览器半区**:浮动终端面板、设置页、ANSI 渲染、轮询(同上) |
+| `scripts/build.mjs` | 构建:把 `src/` 源码内联进 `lib/` 两个半区(`pnpm build`) |
 | `lib/index.js` | 生成物 · Loader 静态宿主半区(真实 Node ESM + harness shim + `/netshell/rpc` 分发) |
 | `lib/client.js` | 生成物 · Loader 静态浏览器半区(`window.__ModuleLoader__` 工厂 + builtin shim) |
 | `cordis.patch.yml` | bundle 补丁:loader 树的 `netshell` 行 |
@@ -34,7 +34,7 @@
 | `TECHNICAL.md` | 本文 |
 | `CHANGELOG.md` | 更新记录 |
 
-两个 `dev/` 源文件均以 `var …; return { inject: [...], apply(ctx) { … } }` 结尾——这是**动态沙箱的函数体求值**格式;`build.mjs` 把整份源码原样内联进一个 IIFE,因此业务逻辑只有一份,模式差异全部收敛在生成物的 shim 里:
+两个 `src/` 源文件均以 `var …; return { inject: [...], apply(ctx) { … } }` 结尾——这是**动态沙箱的函数体求值**格式;`build.mjs` 把整份源码原样内联进一个 IIFE,因此业务逻辑只有一份,模式差异全部收敛在生成物的 shim 里:
 
 | 动态沙箱 builtin | 静态模式落点(lib/index.js / lib/client.js) |
 |------|------|
@@ -46,7 +46,7 @@
 | 客户端 `ctx.timer` | 客户端无 timer 服务,包装层以 `setInterval/setTimeout` 增广 ctx |
 | 服务名 `subprocess` / `credentials` / `timer` | 同名——静态 loader 的 base bundle 提供同名服务(`@deepseek-ai/dsh-subprocess-local` / `dsh-credentials-local` / `cordis-plugin-timer`),inject 直接声明 |
 
-**改代码只改 `dev/`,然后 `pnpm test`**(build + check + smoke)。`lib/` 是生成物但入库提交,保证 git clone / link 安装零构建步骤。
+**改代码只改 `src/`,然后 `pnpm test`**(build + check + smoke)。`lib/` 是生成物但入库提交,保证 git clone / link 安装零构建步骤。
 
 ## 3. 运行环境与宿主契约
 
@@ -207,9 +207,9 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 
 改代码前过一遍:
 
-- [ ] 只改 `dev/` 源码,改完 `pnpm test`(build + check + smoke),提交时包含重新生成的 `lib/`;
+- [ ] 只改 `src/` 源码,改完 `pnpm test`(build + check + smoke),提交时包含重新生成的 `lib/`;
 - [ ] 新对象要进 credentials payload?→ 必须宿主 realm 出身(§8.1);
-- [ ] 动了 RPC 名 / payload?→ `dev/nsh-client.js` 与 `dev/nsh-host.js` 两侧同步 + 更新本文 §5;
+- [ ] 动了 RPC 名 / payload?→ `src/nsh-client.js` 与 `src/nsh-host.js` 两侧同步 + 更新本文 §5;
 - [ ] 动了 Guard 求值顺序或内置规则?→ 更新 §6、README「权限等级」、CHANGELOG;
 - [ ] 动了 askpass / 凭据路径?→ 确认密码不出现在任何 RPC 返回、console、`outAll`;
 - [ ] 新增用户可见行为?→ README + CHANGELOG 同步;

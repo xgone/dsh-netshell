@@ -34,7 +34,7 @@ dsh plugin --profile web add @xgone/dsh-netshell
 
 ### 方式二:内存动态插件(开发调试用)
 
-将 `dev/nsh-host.js` 与 `dev/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH。改动立即生效、随进程消失,适合迭代;每次重启后需重新加载激活。
+将 `src/nsh-host.js` 与 `src/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH。改动立即生效、随进程消失,适合迭代;每次重启后需重新加载激活。
 
 ### 验证安装成功
 
@@ -82,7 +82,7 @@ dsh plugin --profile web add @xgone/dsh-netshell
 - **永久放行该命令**:写入该服务器的规则表(按原文精确匹配)后执行;
 - **拒绝**:丢弃该行并复位提示符,什么都不执行。
 
-内置规则示例(完整清单见 `dev/nsh-host.js` 中的 `BUILTIN_RULES`):
+内置规则示例(完整清单见 `src/nsh-host.js` 中的 `BUILTIN_RULES`):
 
 - `deny`(直接拦截,不可询问):`rm -rf /` 及根路径变体、`mkfs`、`dd of=/dev/*`、fork 炸弹、`chmod -R 777 /*`、覆写 `/dev/sd*` 等;
 - `ask`(拦下询问):`rm -rf`、`shutdown / reboot / halt / poweroff`、`drop database / drop table`、`git push --force`、`git reset --hard`、`iptables -F`、`crontab -r`、`apt/yum remove`、`docker system prune`、`kubectl delete` 等。
