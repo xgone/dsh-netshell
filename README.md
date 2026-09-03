@@ -16,12 +16,12 @@
 
 ## 快速开始
 
-插件有**两种安装形态**:日常开发用「内存动态插件」(改代码即时生效),正式使用/分发用「Loader 静态包」(随 DSH 启动自动加载,无需手动激活)。两者由同一份源码生成,功能完全一致。
+插件有**两种安装形态**:日常开发用「内存动态插件」(改代码即时生效),正式使用/分发用「Loader 静态包」(随 DSH 启动自动加载,无需手动激活)。两者由同一份源码(`src/`)生成,功能完全一致。
 
 ### 方式一:Loader 静态包(推荐,装一次永久生效)
 
 ```sh
-# 本地目录安装(link 模式,改 dev/ 源码后 pnpm build 重新生成 lib/ 即生效)
+# 本地目录安装(link 模式,改 src/ 源码后 pnpm build 重新生成 lib/ 即生效)
 dsh plugin --profile web add link:/path/to/dsh-netshell
 
 # 或安装已发布的 npm 包
@@ -35,6 +35,8 @@ dsh plugin --profile web add @xgone/dsh-netshell
 ### 方式二:内存动态插件(开发调试用)
 
 将 `src/nsh-host.js` 与 `src/nsh-client.js` 作为动态插件的 **Host / Client 两个半区**加载进 DSH。改动立即生效、随进程消失,适合迭代;每次重启后需重新加载激活。
+
+> **新会话 / AI Agent 请先读 [DYNAMIC.md](DYNAMIC.md)**——完整的动态加载操作手册:精确的调用序列、参数模板、激活前逐字节校验方法,以及全部踩坑记录(idPrefix 限制、超长行截断、必须两个半区同包内联等)。照做即可一次加载成功。
 
 ### 验证安装成功
 
@@ -136,6 +138,7 @@ dsh plugin --profile web add @xgone/dsh-netshell
 | 文档 | 读者 |
 |------|------|
 | [README.md](README.md)(本文) | 使用者 |
+| [DYNAMIC.md](DYNAMIC.md) | 新会话 / AI agent,动态加载操作手册(免试错) |
 | [CHANGELOG.md](CHANGELOG.md) | 所有人,版本变更记录 |
 | [TECHNICAL.md](TECHNICAL.md) | 开发者 / AI agent,架构与实现细节 |
 | [DESIGN.zh.md](DESIGN.zh.md) | 原始设计方案与 DSH 宿主契约调研 |
