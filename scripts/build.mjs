@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * NetShell 构建脚本:单一来源(dev/ 内存动态插件,ES5 函数体风格)生成
+ * NetShell 构建脚本:单一来源(src/ 内存动态插件,ES5 函数体风格)生成
  * Loader 静态包的两个半区(lib/):
  *
- *   dev/nsh-host.js   →  lib/index.js   宿主半区(真实 Node ESM + harness shim + HTTP RPC 路由)
- *   dev/nsh-client.js →  lib/client.js  浏览器半区(window.__ModuleLoader__ 工厂 + builtin shim)
+ *   src/nsh-host.js   →  lib/index.js   宿主半区(真实 Node ESM + harness shim + HTTP RPC 路由)
+ *   src/nsh-client.js →  lib/client.js  浏览器半区(window.__ModuleLoader__ 工厂 + builtin shim)
  *
  * 两个动态文件都以 `var …; return { inject, apply }` 的「函数体」形式编写
  * (动态沙箱按函数体求值),因此可以原样内联进一个 IIFE:
@@ -22,13 +22,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const hostSource = readFileSync(join(root, 'dev/nsh-host.js'), 'utf8')
-const clientSource = readFileSync(join(root, 'dev/nsh-client.js'), 'utf8')
+const hostSource = readFileSync(join(root, 'src/nsh-host.js'), 'utf8')
+const clientSource = readFileSync(join(root, 'src/nsh-client.js'), 'utf8')
 
 const RPC_PATH = '/netshell/rpc'
 const PACKAGE_ID = '@xgone/dsh-netshell'
 
-for (const [name, src] of [['dev/nsh-host.js', hostSource], ['dev/nsh-client.js', clientSource]]) {
+for (const [name, src] of [['src/nsh-host.js', hostSource], ['src/nsh-client.js', clientSource]]) {
   if (src.includes('`')) throw new Error(`${name} 含反引号——动态源码约定为 ES5 字符串拼接,请保持`)
   try {
     // 源码是函数体(顶层 return 合法),node --check 不适用;new Function 等价校验语法
@@ -42,7 +42,7 @@ for (const [name, src] of [['dev/nsh-host.js', hostSource], ['dev/nsh-client.js'
 const hostTemplate = `/**
  * NetShell — DSH 远程终端插件(Loader 静态包 · 宿主半区)
  *
- * 由 scripts/build.mjs 从 dev/nsh-host.js 生成,请勿手改;
+ * 由 scripts/build.mjs 从 src/nsh-host.js 生成,请勿手改;
  * 改 dev/ 源码后运行 \`pnpm build\` 重新生成。
  *
  * 静态模式与动态沙箱的差异全部收敛在本文件的 shim 里:
@@ -130,7 +130,7 @@ export { apply, inject, name }
 const clientTemplate = `/**
  * NetShell — DSH 远程终端插件(Loader 静态包 · 浏览器半区)
  *
- * 由 scripts/build.mjs 从 dev/nsh-client.js 生成,请勿手改;
+ * 由 scripts/build.mjs 从 src/nsh-client.js 生成,请勿手改;
  * 改 dev/ 源码后运行 \`pnpm build\` 重新生成。
  *
  * 形状与官方 dsh.client 包一致:window.__ModuleLoader__.load({
@@ -198,4 +198,4 @@ function splice(template, marker, source) {
 mkdirSync(join(root, 'lib'), { recursive: true })
 writeFileSync(join(root, 'lib/index.js'), splice(hostTemplate, '/*__HOST_SOURCE__*/', hostSource))
 writeFileSync(join(root, 'lib/client.js'), splice(clientTemplate, '/*__CLIENT_SOURCE__*/', clientSource))
-console.log('build: lib/index.js + lib/client.js 已生成(源: dev/nsh-host.js + dev/nsh-client.js)')
+console.log('build: lib/index.js + lib/client.js 已生成(源: src/nsh-host.js + src/nsh-client.js)')
