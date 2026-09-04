@@ -1,5 +1,9 @@
 # NetShell — DSH 远程终端插件
 
+<p align="center">
+  <img src="assets/social-preview.png" alt="NetShell — Guarded SSH Terminal for DSH" width="720" />
+</p>
+
 在 DSH 界面里直接操作远程服务器的 SSH 终端:主区域「远程终端」Tab(左会话列表 + 右终端的分栏布局)、危险命令拦截确认、密码存入 DSH 加密凭据库且**完全不经过 AI 会话**。内置两个模型工具(`netshell_servers` / `netshell_run`),AI 可以帮你执行远程命令,但每一条都要经过与人工输入相同的权限护栏。
 
 > **分支说明**:`master` = Loader 静态包(推荐,装一次永久生效);`dev` = 动态加载形态(开发调试,改动即时生效)。两种形态由同一份源码生成,功能一致。
