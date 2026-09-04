@@ -86,9 +86,9 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 | `netshell.profiles.save` | `{ server, password?, clearPassword? }` | `{ server }` | 新建 / 更新;`password` 非空则写凭据,`clearPassword` 则删除;校验必填项与端口 1–65535 |
 | `netshell.profiles.delete` | `{ id }` | `{ ok: true }` | 删档案 + 删凭据 + 终止该服务器活跃会话 |
 | `netshell.connect` | `{ serverId }` | `{ id, pid }` | 每次都 spawn 新会话 |
-| `netshell.input` | `{ id, data }` | `{ ok: true }` | 键盘输入,单次 ≤4096 字符;pending 期间整体丢弃 |
+| `netshell.input` | `{ id, data }` | `{ ok: true }` | 键盘输入,单次 ≤4096 字符;pending 期间整体丢弃;**内嵌 `\r`/`\n` 的多字符 data 强制拆段送入 Guard**(§6.1),不存在绕过拦截的输入形态 |
 | `netshell.poll` | `{ id }` | `{ status, output, lossy, dropped, nextCursor, events, pending, hint, closedReason, atPwPrompt, cols, rows }` | **全量快照**(见下) |
-| `netshell.decide` | `{ id, pendingId, action: 'allow'\|'always'\|'deny' }` | `{ ok: true }` | 对挂起命令做裁决 |
+| `netshell.decide` | `{ id, pendingId, action: 'allow'\|'always'\|'deny' }` | `{ ok: true }` | 对挂起命令做裁决;人工挂起(`from: 'line'`)按原行为向 PTY 写 `\r`/`\u0015`,工具挂起(`from: 'tool'`)只记账到确认令牌,不动 PTY |
 | `netshell.disconnect` | `{ id }` | `{ ok: true }` | 终止会话 |
 | `netshell.sessions.list` | `{}` | `{ sessions: [{ id, serverName, status, pending }] }` | 用于跨面板发现会话 |
 
@@ -109,6 +109,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 - **Tab** 与其余 ESC 序列直接透传(补全、vim 等不受 Guard 管);
 - **密码提示旁路**:`s.tail`(最近 60 字符)匹配 `/password\s*:$/i` 时置 `atPwPrompt`,此后回车直接透传不评估——否则 sudo / ssh 的密码输入会被当成命令送进 Guard;
 - **pending(待确认)期间**所有输入被丢弃;`deny` 裁决后写 `\x15` 复位远端行。
+- **多字符防绕过**(`feedMultiline`):合法浏览器客户端只发单键(回车是单独一条 `\r`),但协议层曾允许一条多字符 `data` 内嵌 `\r` 直达 PTY 绕过 Guard。现 `netshell.input` 对含 `\r`/`\n` 的 data 按 `[\r\n]` 拆段(`\r\n` 先归一),逐字符送 `onInput`、段间注入 `\r` 提交——每一段回车都走 `submitEnter` → `evaluateFor`,良性段照常执行、危险段照常挂起,与逐键输入语义等价。
 
 ### 6.2 求值顺序(`evaluateFor`)
 
@@ -156,11 +157,17 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 `harness.defineTool` 定义,`ctx.effect` 中注册、dispose 时反注册:
 
 - **`netshell_servers`**:无参数,读 `PKEY` 返回 `{ servers: [{ id, name, host, port, user, auth, level }] }`;
-- **`netshell_run`**:参数 `server`(必填)、`command`(必填)、`timeoutMs`(默认 30000)。执行流(`toolRunExecute`):
+- **`netshell_run`**:参数 `server`(必填)、`command`(必填)、`timeoutMs`(默认 30000);`confirmToken` 仅回退路径使用,`choice` 已废弃(授权只认真人裁决,参数被忽略)。执行流(`toolRunExecute`):
   1. `resolveServer` → `ensureSession`(**复用或新建交互 PTY 会话**,与面板共享,waitLive 最长 20s);
   2. Guard 评估:`deny` → 直接返回 blocked;`allow` → `runRemote`(`ssh -T … <cmd>` 独立一次性执行,同样使用私有 known_hosts;stdout 上限 200K/spill 400K);
-  3. `ask` → 把命令写入共享会话的行缓冲(**面板可见**)并置 pending,`waitPendingGone` 轮询等待用户在面板裁决,**最长 600s**;超时 / 中止 / 拒绝均返回 blocked;放行后走 `runRemote`;
+  3. `ask` → 依次尝试四条路径:
+     - **路径一(令牌兑现)**:携 `confirmToken` 重跑时,校验一次性、服务器+命令绑定、`TOOL_ASK_TTL`(10 分钟)时效;面板已裁决 → 兑现执行,未裁决 → 返回 blocked 且**不消耗令牌**(模型可提醒用户后再试);
+     - **路径二(漏带令牌兑现)**:无令牌但存在 (服务器, 命令) 精确匹配且面板已裁决的记录 → 直接兑现;
+     - **路径三(首选 · 原生弹卡)**:直调宿主 `ctx.get('userQuestions').ask({ questions, agent: exec.agent, signal: exec.signal })`——与内置 `ask_user_question` 完全同一形态,确认卡原生弹在**对话窗口**,工具原地等待真人作答;答案由宿主服务返回,选「执行一次」→ `runRemote`、「永久放行该命令」→ 写规则表后 `runRemote`、其余(拒绝/自定义文本/空答案)一律按拒绝。**agent 必须原样透传 `exec.agent`(live Agent 对象)**:服务端做 `agents.get(agent.id) === agent` 全等校验,0.5.x 用 id 重建对象导致 `CALLER_NOT_LIVE` fail closed 是当年误诊为"宿主平面无法弹卡"的根因;`ASK_ABORTED` → aborted,`NO_PROVIDER` / `DELEGATED_CALLER` 等 → 路径四;
+     - **路径四(面板回退)**:共享会话置 `pending(from: 'tool', token)`(面板横幅可见)+ 签发一次性令牌返回 blocked;同一会话同时只允许一条挂起;`TOOL_ASK_TTL` 后 sweep 自动撤销挂起并作废令牌;
   4. 结果(stdout/stderr/exitCode)与 `$ <cmd>` 一起**回写共享会话的 `outAll` 与事件流**,面板全程可见模型做了什么。
+
+  授权凭证只会来自真人操作(确认卡答案 / 面板 `netshell.decide` 点击),模型的 `choice` 参数不参与授权——这是机制性绑定,不依赖模型自觉。
 
 ## 8. 实现要点与坑
 
@@ -184,7 +191,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 | 设计 | 实现 |
 |------|------|
 | RPC 命名 `netshell.servers.*`、`sessionId` / `cursor` 增量拉取 | `netshell.profiles.*`、`id`、全量快照 poll |
-| 拦截询问走宿主 `userQuestions.ask()` | 自实现 pending + 面板横幅 + `netshell.decide`,不依赖 userQuestions |
+| 拦截询问走宿主 `userQuestions.ask()` | 插件在工具 ask 分支**直调** `userQuestions.ask`(agent 原样透传 `exec.agent`),确认卡弹对话窗口;弹卡不可用时回退「面板挂起 + 面板裁决兑现令牌」 |
 | 连接前探测 `ssh -V` 并降级 | 未做 |
 | 规则匹配做 shell 词法切分 | 仅原始串匹配 + sudo 类前缀剥离 |
 | 模型工具是 P3 可选项 | 已随首版交付(`netshell_servers` / `netshell_run`)|
@@ -192,9 +199,13 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 ### 8.4 安全边界与已知弱点
 
 - **护栏非沙箱**:匹配对象是原始命令串,base64 / 变量间接 / heredoc 等可绕过;`locked` + `allow` 白名单是唯一强约束,文档需持续向用户明示;
+- **Guard 只守「整行」**:进入交互式程序(python / mysql / vim `:!` / 嵌套 ssh)之后的操作不在评估范围,被评估的只有启动它的那一行;
+- **接管范围 = 本插件两条通道**:终端 UI 与 `netshell_run` 之外(如通用 shell 工具直接 `ssh`、其他插件 / MCP),命令不经本插件,插件无法也无处拦截——宿主 `subprocess` 服务不提供全局 spawn hook;
+- ask 的授权凭证机制性绑定真人操作:确认卡答案由宿主 `userQuestions.ask` 返回、面板裁决经 `netshell.decide` 记账,`choice` 参数不参与授权;
+- `netshell.input` 已做多字符防绕过(内嵌 `\r`/`\n` 拆段过 Guard),但 `\x15`/`\x7f` 等控制字符在行缓冲与远端 readline 间的语义差异理论上仍可构造出「Guard 看到的串 ≠ 远端执行的串」的混淆输入,归类为混淆变形类已知弱点;
 - `atPwPrompt` 是启发式:远端提示语不含 `password:` 时(如自定义 PAM 提示),密码回车可能落入评估路径,通常无副作用但会记一条历史;
 - host key 变更时由 ssh 自身拒绝连接(指纹记在私有 `~/.dsh/netshell/known_hosts`),`onOutput` 识别特征文案给出中文 hint 与善后指引;
-- 模型路径的 `waitPendingGone` / `waitLive` 是 120–150ms 轮询,非事件驱动(可接受,但不优雅)。
+- 模型路径的 `waitLive` 是 120–150ms 轮询,非事件驱动(可接受,但不优雅)。
 
 ## 9. Client 实现速览
 
