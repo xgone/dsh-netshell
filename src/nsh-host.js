@@ -288,10 +288,50 @@ return {
     }
 
     // 宿主 userQuestions 服务(与内置 ask_user_question 同一实例):确认卡弹在对话
-    // 窗口、工具原地等待真人回答,答案由宿主返回——模型无从代答。动态加载等无该
-    // 服务的环境返回 undefined,调用方回退「面板挂起 + 面板裁决兑现令牌」。
-    function resolveUserQuestions() {
-      try { return ctx.get('userQuestions') } catch (e) { return undefined }
+    // 窗口、工具原地等待真人回答,答案由宿主返回——模型无从代答。
+    // 该服务由 base bundle 的 user-questions 行提供;为兼容静态/动态两种挂载形态,
+    // 依次尝试:自身 ctx → live agent 的 ctx(agent.ctx)→ agents 注册表取 live 再取 ctx。
+    // 每一步的成败写入 diag,回退时随 message 带出,便于定位「为什么没弹原生卡」。
+    function resolveUserQuestions(agent) {
+      var uq
+      var diag = []
+      try {
+        uq = ctx.get('userQuestions')
+        diag.push('own=' + (uq ? 'yes' : 'no'))
+      } catch (e) { diag.push('own=throw:' + (e && e.message)) }
+      if (uq) return { uq: uq, diag: diag.join(',') }
+      if (agent) {
+        diag.push('agent=' + (agent.id || 'yes'))
+        if (agent.ctx) {
+          try {
+            uq = agent.ctx.get('userQuestions')
+            diag.push('agentCtx=' + (uq ? 'yes' : 'no'))
+          } catch (e) { diag.push('agentCtx=throw:' + (e && e.message)) }
+        } else {
+          diag.push('agentCtx=none')
+        }
+        if (!uq) {
+          try {
+            var agents = ctx.get('agents')
+            diag.push('agents=' + (agents ? 'yes' : 'no'))
+            if (agents) {
+              var live = agents.get(agent.id)
+              diag.push('live=' + (live ? 'yes' : 'no'))
+              if (live && live.ctx) {
+                try {
+                  uq = live.ctx.get('userQuestions')
+                  diag.push('liveCtx=' + (uq ? 'yes' : 'no'))
+                } catch (e) { diag.push('liveCtx=throw:' + (e && e.message)) }
+              } else if (live) {
+                diag.push('liveCtx=none')
+              }
+            }
+          } catch (e) { diag.push('agents=throw:' + (e && e.message)) }
+        }
+      } else {
+        diag.push('agent=missing')
+      }
+      return { uq: uq, diag: diag.join(',') }
     }
 
     // 查找「面板已裁决、尚未被兑现」的工具令牌:(服务器, 命令) 精确匹配。
@@ -307,11 +347,13 @@ return {
 
     // 弹卡不可用时的回退:在共享会话挂起(面板横幅可见)+ 签发一次性令牌。
     // 令牌只有在面板真实点击(allow/always/deny)后才可兑现,模型无法自行放行。
-    function panelAskFallback(disp, server, cmd, askRule) {
+    // diag 是「为什么没弹原生卡」的诊断串,随 message 带出并打日志。
+    function panelAskFallback(disp, server, cmd, askRule, diag) {
+      try { console.error('[netshell] 原生弹卡不可用,面板兜底 diag=' + (diag || 'none')) } catch (e) {}
       if (disp.pending) {
         return Promise.resolve({
           ok: false, blocked: true, action: 'ask', rule: askRule, command: cmd, output: '',
-          message: '该会话已有一条待确认命令(' + disp.pending.command + '),请先提醒用户在「远程终端」面板完成裁决。'
+          message: '该会话已有一条待确认命令(' + disp.pending.command + '),请先提醒用户在「远程终端」面板完成裁决。[' + (diag || '') + ']'
         })
       }
       nonce += 1
@@ -332,7 +374,7 @@ return {
       return Promise.resolve({
         ok: false, blocked: true, action: 'ask', needsConfirmation: true,
         confirmToken: tkey, rule: askRule, command: cmd, output: '',
-        message: '命令命中危险规则「' + askRule + '」,已挂起等待用户裁决(10 分钟内有效)。请调用 ask_user_question 提醒用户打开「远程终端」面板,点击「执行一次 / 永久放行该命令 / 拒绝」;面板裁决是唯一授权凭证,再用返回的 confirmToken 重新调用本工具。'
+        message: '命令命中危险规则「' + askRule + '」,已挂起等待用户裁决(10 分钟内有效)。请调用 ask_user_question 提醒用户打开「远程终端」面板,点击「执行一次 / 永久放行该命令 / 拒绝」;面板裁决是唯一授权凭证,再用返回的 confirmToken 重新调用本工具。[未弹原生卡:' + (diag || '未知') + ']'
       })
     }
 
@@ -830,42 +872,61 @@ function makeAskpass(s) {
               }
               // 路径三(首选):插件直调宿主 userQuestions.ask —— 确认卡原生弹在对话窗口,
               // 工具原地等待真人选择;答案由宿主服务返回,机制性绑定,模型无从代答。
-              // 调用形态与内置 ask_user_question 完全一致:agent 必须原样透传 exec.agent
-              // (live Agent 对象),0.5.x 的失败源于用 id 重建对象,过不了 CALLER_NOT_LIVE 校验。
-              var uq = resolveUserQuestions()
+              // 调用形态与内置 ask_user_question 一致:agent 原样透传 exec.agent(live 对象)。
+              // userQuestions 由 base bundle 提供于根组合;兼容 agent 作用域挂载,用 exec.agent 桥接解析。
+              var rq = resolveUserQuestions(exec && exec.agent)
+              var uq = rq.uq
               if (uq && exec && exec.agent) {
-                return uq.ask({
-                  questions: [{
-                    id: 'netshell-guard',
-                    header: '危险命令确认',
-                    question: '在「' + (server.name || server.host) + '」执行命中危险规则的命令,是否放行?' + NL + '$ ' + cmd,
-                    detail: '匹配规则:' + askRule,
-                    options: [
-                      { label: '执行一次', description: '本次放行,立即执行' },
-                      { label: '永久放行该命令', description: '按原文写入该服务器规则表后执行' },
-                      { label: '拒绝', description: '不执行' }
-                    ]
-                  }],
-                  agent: exec.agent,
-                  signal: exec.signal
-                }).then(function (ans) {
+                var guardAsk = function (withAgent) {
+                  var req = {
+                    questions: [{
+                      id: 'netshell-guard',
+                      header: '危险命令确认',
+                      question: '在「' + (server.name || server.host) + '」执行命中危险规则的命令,是否放行?' + NL + '$ ' + cmd,
+                      detail: '匹配规则:' + askRule,
+                      options: [
+                        { label: '执行一次', description: '本次放行,立即执行' },
+                        { label: '永久放行该命令', description: '按原文写入该服务器规则表后执行' },
+                        { label: '拒绝', description: '不执行' }
+                      ]
+                    }],
+                    signal: exec.signal
+                  }
+                  if (withAgent) req.agent = exec.agent
+                  return uq.ask(req)
+                }
+                var onGuardAns = function (ans) {
                   var sel = (ans && ans.answers && ans.answers[0] && ans.answers[0].selected) || []
                   var pick = sel.length > 0 ? sel[0] : ''
                   if (pick === '永久放行该命令') return confirmedRun('always')
                   if (pick === '执行一次') return confirmedRun('allow')
                   // 拒绝 / 自定义文本 / 空答案 / 未知选项一律按拒绝(安全默认)。
                   return deniedResult(askRule)
-                }, function (e) {
+                }
+                return guardAsk(true).then(onGuardAns, function (e) {
                   if (e && e.code === 'ASK_ABORTED') {
                     pushEvent(disp, { type: 'deny', command: cmd, rule: '用户中止' })
                     return { ok: false, blocked: true, action: 'aborted', rule: askRule, output: '', command: cmd }
                   }
-                  // 无 answerer(NO_PROVIDER)/ 子代理上下文(DELEGATED_CALLER)等 → 面板回退。
-                  return panelAskFallback(disp, server, cmd, askRule)
+                  var code1 = (e && e.code) || '?'
+                  // 带 agent 的作用域瀑布无回答者(NO_PROVIDER)时,退一次全局瀑布(不带 agent):
+                  // 回答者可能只注册在服务自身作用域;真人点卡的机制性授权不变。
+                  if (code1 === 'NO_PROVIDER') {
+                    return guardAsk(false).then(onGuardAns, function (e2) {
+                      var code2 = (e2 && e2.code) || '?'
+                      if (e2 && e2.code === 'ASK_ABORTED') {
+                        pushEvent(disp, { type: 'deny', command: cmd, rule: '用户中止' })
+                        return { ok: false, blocked: true, action: 'aborted', rule: askRule, output: '', command: cmd }
+                      }
+                      return panelAskFallback(disp, server, cmd, askRule, 'ask失败 ' + code1 + '+全局' + code2 + ': ' + String((e2 && e2.message) || e2).slice(0, 140) + ' | ' + rq.diag)
+                    })
+                  }
+                  // 无 answerer / 子代理上下文(DELEGATED_CALLER)等 → 面板回退。
+                  return panelAskFallback(disp, server, cmd, askRule, 'ask失败 ' + code1 + ': ' + String((e && e.message) || e).slice(0, 180) + ' | ' + rq.diag)
                 })
               }
-              // 路径四:无 userQuestions 服务(动态加载等环境)→ 面板挂起回退。
-              return panelAskFallback(disp, server, cmd, askRule)
+              // 路径四:取不到 userQuestions 服务 → 面板挂起回退(带诊断)。
+              return panelAskFallback(disp, server, cmd, askRule, 'uq未解析 ' + rq.diag)
             }
             return runRemote(server, cmd, timeoutMs, exec && exec.signal).then(function (r) { return appendOut(r, true) })
           })

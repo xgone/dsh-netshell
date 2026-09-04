@@ -6,12 +6,20 @@
 
 ## [未发布]
 
+### 新增
+
+- **服务器规则编辑区重做(设置 → 远程终端)**:规则不再是一排裸输入框——标题行改为「服务器规则 + 按顺序匹配 · 优先于内置规则库 · 只约束 AI 执行的命令」,正文补充匹配语义说明(完整命令行通配、`*` / `?` 通配符、忽略大小写、自动剥除 sudo / nohup 等前缀、从上到下先命中先生效、deny / ask / allow 三种动作含义);新增四个**可点击示例**(放行日志清理 / 禁止强推 / systemctl 先确认 / docker rm 先确认),点击即作为一条规则填入列表;规则列表带行号,动作用中英双语下拉(deny 拦截 / ask 确认 / allow 放行);空规则列表显示占位说明。保存时校验规则模式不能为空(此前空模式行被宿主静默丢弃,用户无从得知)。
+
 ### 修复
+
+- **AI 危险命令确认卡在部分挂载形态退化为面板兜底(原生弹卡回归修复)**:`netshell_run` 命中 `ask` 规则时的首选路径是直调宿主 `userQuestions.ask` 在对话窗口弹原生确认卡,但 `userQuestions` 服务的可解析性依赖插件 ctx 所处作用域——动态加载宿主半区挂在根组合 `cordis-dynamic` 组下,自身 ctx 取不到该服务时旧代码直接落到面板兜底。现 `resolveUserQuestions(agent)` 依次尝试:自身 ctx → `exec.agent.ctx` → `agents.get(agent.id).ctx` 桥接;带 `agent` 的作用域瀑布若返回 `NO_PROVIDER`(回答者未注册在该作用域),自动退一次**不带 agent 的全局瀑布**重试(真人点卡的机制性授权不变);仍失败才回退面板。所有回退路径的失败码与解析诊断随工具 `message` 带出并打日志(`[未弹原生卡:…]`),便于定位。
+- **服务器规则编辑区横向溢出(超出设置面板)**:动作下拉同时设了 `flex: none`(不可收缩)与内联 `maxWidth: 'none'`(移除了 `select.nsh-in` 的 240px 上限),而 `.nsh-in` 自带 `width: 100%`,使下拉以"容器全宽"为基准且不可收缩,把输入框和删除按钮整体挤出面板。现下拉改为固定 118px,模式输入框 `min-width: 0` 允许收缩,窄窗口下整行可正常压缩;删除按钮从整颗「删除」胶囊改为紧凑 ✕ 图标按钮,行内布局不再拥挤。
 
 - **`netshell.input` 多字符防绕过(协议层漏洞)**:此前一条内嵌 `\r` / `\n` 的多字符 `data` 会整体直达 PTY,完全绕过 Guard 直接在远端执行(合法浏览器客户端只发单键,故实际暴露面为已持有已认证浏览器会话的调用方)。现对含 `\r` / `\n` 的输入按 `[\r\n]` 拆段、逐字符送入 Guard,段间注入回车提交——每一段都过 `evaluateFor`,良性段照常执行、危险段照常挂起,与逐键输入语义等价;单键 / ESC 序列路径行为不变。
 
 ### 变更
 
+- **设置页「远程终端」图标更换为终端 `>_` 图标(纯插件侧,零 harness 改动)**:设置导航图标由壳层按 section id 兜底渲染,本插件 id 落在齿轮兜底。参照 dsh-remote 的做法:`settings.section` 的 `label` 从字符串改为 **thunk 返回「图标 + 文字」React 元素**(壳层经 `resolveSlotLabel` 把它渲染进导航按钮的 label 座),图标为内联 SVG 终端窗(动态沙箱无 require、拿不到 primitives 图标库,故自绘 16px `>_` 描边图标);同时插入一行插件自有 CSS `button:has(.nsh-nav) > :first-child{display:none!important}` 隐藏壳层在该行兜底画出的齿轮,style 随插件启停自动清理。
 - **`netshell_run` 危险命令确认改为「插件直调宿主提问服务」(机制性绑定)**:命中 `ask` 规则时,插件直接调 `ctx.get('userQuestions').ask({ questions, agent: exec.agent, signal: exec.signal })`——确认卡原生弹在对话窗口,工具原地等待真人选择(执行一次 / 永久放行该命令 / 拒绝),答案由宿主服务返回、模型无从代答;**`choice` 参数废弃,不再参与授权**(此前令牌 + choice 流程中,令牌首次拦截即签发,模型可自行伪造 `choice=allow` 绕过确认,属提示词级约束而非机制级)。0.5.x「宿主平面无法弹卡」的结论系误诊:失败根因是用 `exec.agent.id` 重建 agent 对象,过不了 `userQuestions.ask` 的 `CALLER_NOT_LIVE` 全等校验;与内置 `ask_user_question` 同形态调用(原样透传 `exec.agent`)即可正常弹卡。
 - **面板裁决回退**:弹卡不可用(无 answerer 的 `NO_PROVIDER`、子代理上下文的 `DELEGATED_CALLER`、动态加载无 `userQuestions` 服务)时,命令在共享会话挂起(面板横幅可见)+ 签发一次性令牌;令牌只有在面板真实裁决(`netshell.decide`,allow / always / deny)后才可兑现,未裁决不消耗、10 分钟(TOOL_ASK_TTL)后自动撤销挂起并作废令牌;同一会话同时只允许一条挂起。工具挂起(`from: 'tool'`)的裁决只记账,不再向 PTY 写 `\r` / `\u0015`,避免误清用户正在输入的行。
 - 测试按新契约重写(`test/ask-flow.mjs`,33 项断言):原生弹卡参数形态 / 真人答案映射 / 伪造 `choice` 无效 / 中止处理 / 面板回退全流程(未裁决保留令牌、裁决兑现、一次性复用拒绝、漏带令牌兑现、命令不匹配、同会话单挂起、超时 sweep)/ 动态形态(无 `userQuestions`)回退 / `netshell.input` 多字符拆段(良性执行、危险拦下、回车不直达 PTY)。
