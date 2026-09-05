@@ -73,8 +73,6 @@ The terminal footer shows run, blocked, and allowed counts. Open **History** to 
 
 ## Feature Screenshot
 
-This screenshot was captured from the DSH Web UI over CDP with a sanitized local demo workspace and local terminal:
-
 ![Terminal and dangerous-command confirmation](assets/terminal-en.png)
 
 ## AI Access
