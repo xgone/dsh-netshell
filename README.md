@@ -1,13 +1,13 @@
 # DSH-NetShell
 
-[中文](README.md) · [English](README.en.md)
-
 <p align="center">
   <a href="https://github.com/xgone/dsh-netshell/actions/workflows/ci.yml"><img src="https://github.com/xgone/dsh-netshell/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://www.npmjs.com/package/@xgone/dsh-netshell"><img src="https://img.shields.io/npm/v/%40xgone%2Fdsh-netshell?logo=npm&logoColor=white" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/@xgone/dsh-netshell"><img src="https://img.shields.io/npm/dm/%40xgone%2Fdsh-netshell?logo=npm&logoColor=white" alt="npm downloads" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f.svg?logo=opensourceinitiative&logoColor=white" alt="MIT License" /></a>
 </p>
+
+<p align="center">[中文](README.md) · [English](README.en.md)</p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — 受保护的本地与远程 SSH 终端" width="720" />
