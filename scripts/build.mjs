@@ -183,7 +183,7 @@ window.__ModuleLoader__.load({
 
     return {
       name: 'netshell',
-      inject: ['slots'],
+      inject: ['slots', 'locale'],
       apply: function (ctx) {
         // 动态源码读取 ctx.timer(客户端没有该服务)——在原型链上增广,保留 ctx.get 原语义
         var scoped = Object.create(ctx)

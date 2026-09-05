@@ -104,11 +104,11 @@ var CSS = ''
   + '.nsh-line{min-height:20px}'
   + '.nsh-banner{flex:none;margin:8px 14px 8px;padding:10px 12px;background:' + TK.l2 + ';border:0.5px solid ' + TK.warn + ';border-radius:10px;font-size:12.5px}'
   + '.nsh-statuswrap{position:relative;flex:none}'
-  + '.nsh-statusbar{display:flex;align-items:center;gap:6px;height:28px;padding:0 14px;border-top:0.5px solid ' + TK.b2 + ';font-size:11.5px;color:' + TK.t3 + ';background:' + TK.l2 + '}'
+  + '.nsh-statusbar{display:flex;align-items:center;gap:6px;height:28px;padding:0 14px;border-bottom:0.5px solid ' + TK.b2 + ';font-size:11.5px;color:' + TK.t3 + ';background:' + TK.l2 + '}'
   + '.nsh-latest{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:ui-monospace,Menlo,Consolas,monospace;color:' + TK.ls + '}'
   + '.nsh-mini{flex:none;height:20px;padding:0 8px;border:0.5px solid ' + TK.b3 + ';border-radius:10px;background:transparent;color:' + TK.ls + ';font:inherit;font-size:11px;line-height:16px;cursor:pointer}'
   + '.nsh-mini:hover,.nsh-mini-on{background:' + TK.hov + ';color:' + TK.lb + '}'
-  + '.nsh-histpanel{position:absolute;left:0;right:0;bottom:100%;max-height:230px;overflow-y:auto;background:' + TK.l1 + ';border-top:0.5px solid ' + TK.b2 + ';box-shadow:0 -8px 24px rgba(0,0,0,.25);z-index:6;padding:6px 0}'
+  + '.nsh-histpanel{position:absolute;left:0;right:0;top:100%;bottom:auto;max-height:230px;overflow-y:auto;background:' + TK.l1 + ';border-bottom:0.5px solid ' + TK.b2 + ';box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:6;padding:6px 0}'
   + '.nsh-histrow{display:flex;align-items:center;gap:8px;padding:3px 14px;font-size:11.5px;line-height:18px;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap;color:' + TK.lb + '}'
   + '.nsh-histrow:hover{background:' + TK.hov + '}'
   + '.nsh-time{flex:none;color:' + TK.t3 + ';font-size:10.5px}'
@@ -307,6 +307,58 @@ var store = {
   }
 }
 
+var localeService = null
+function isEnglish() {
+  var active = localeService && localeService.getLocale().active
+  return typeof active === 'string' && (active === 'en' || active.indexOf('en-') === 0)
+}
+var COPY = {
+  zh: {
+    terminal: '终端', localTerminal: '本地终端', currentDevice: '当前设备', newSession: '新建',
+    omitted: '… 已省略较早的 ', lines: ' 行输出', dangerPending: '⚠ 危险命令待确认', matchedRule: '匹配规则:', lockedRule: 'locked 模式白名单外', blockedWaiting: ' · 已拦截,等待你的决定',
+    once: '执行一次', always: '永久放行该命令', deny: '拒绝', exec: '执行', blocked: '拦截', allowed: '放行', closed: '退出',
+    termTheme: '终端配色:深色 / 浅色', dark: '深色', light: '浅色', historyEmpty: '本会话还没有命令记录', noCommand: '暂无命令', collapseHistory: '收起历史', history: '历史',
+    connect: '连接', sessions: '会话', servers: '服务器', noSessions: '暂无会话', noProfiles: '暂无档案', archivePath: '档案管理:设置 → ',
+    connectFailed: '连接失败:', selectServer: '从左侧选择一个服务器开始远程会话', noProfile: '还没有服务器档案 — 在「设置 → ', closeRemove: '关闭并移除',
+    rename: '重命名', remove: '移除', disconnectRemove: '断开并移除', pending: '待确认',
+    ruleExamples: '示例:', serverRules: '服务器规则', ruleHint: '按顺序匹配 · 优先于内置规则库 · 只约束 AI 执行的命令',
+    ruleHelp1: '匹配完整命令行:支持 * (任意字符) 与 ? (单字符) 通配,不区分大小写,自动剥除 sudo / nohup 等前缀。',
+    ruleHelp2: '从上到下先命中先生效:deny 直接拦截;ask 执行前弹确认;allow 直接放行(locked 模式下即白名单)。',
+    noCustomRules: '暂无自定义规则 — 未命中的命令按内置规则库 + 权限等级处理。可从下方示例一键添加。', addRule: '+ 添加规则',
+    editServer: '编辑服务器:', newServer: '新增服务器', name: '名称', host: '主机', port: '端口', user: '用户名', auth: '认证方式', password: '密码', key: '私钥', agent: 'ssh-agent', keyPath: '私钥路径', level: '权限等级',
+    open: 'open 宽松', guarded: 'guarded 默认', locked: 'locked 严格', passwordKeep: '已设置 — 留空保持不变', passwordHint: '输入密码(存入加密凭据库,不经 AI 会话)', clearPassword: '清除已存密码', save: '保存', cancel: '取消', edit: '编辑', delete: '删除',
+    noServers: '还没有服务器档案。新增一个,密码会存入 DSH 加密凭据库,连接时由插件直接注入,完全不经过 AI 会话。', levels: '权限等级说明', openHelp: '[open] 宽松:所有命令直接放行,仅内置 deny 规则(如 rm -rf /)硬拦截。', guardedHelp: '[guarded] 默认:命中 ask 规则的危险命令会被拦下,弹出确认后由你决定是否执行。', lockedHelp: '[locked] 严格:只有规则表中 allow 的命令直接执行,其余一律先询问。', requiredFields: '名称、主机、用户名为必填项', invalidPort: '端口必须是 1-65535 的整数', emptyRule: '第 {n} 条规则的命令模式为空,请填写或删除该行', rulePatternPlaceholder: '命令通配,如 rm -rf /var/log/*', ruleActionTitle: 'deny 直接拦截 / ask 执行前确认 / allow 直接放行', denyAction: 'deny 拦截', askAction: 'ask 确认', allowAction: 'allow 放行',
+    exampleAllowTip: '放行日志清理', exampleDenyTip: '本服务器永久禁止强推', exampleAskSystemTip: '管理 systemd 服务前先确认', exampleAskDockerTip: '删除容器前先确认', newNamePlaceholder: '生产-web-01', hostPlaceholder: '10.0.0.5 或 host.example.com', closeSession: '会话已结束:', unknown: '未知原因',
+    passwordConfigured: '密码已存入凭据库', passwordNotConfigured: '未设置密码', connection: '连接',
+  },
+  en: {
+    terminal: 'Terminal', localTerminal: 'Local terminal', currentDevice: 'This device', newSession: 'New',
+    omitted: '… Earlier ', lines: ' lines omitted', dangerPending: '⚠ Dangerous command pending', matchedRule: 'Matched rule:', lockedRule: 'locked mode: command is not allowlisted', blockedWaiting: ' · blocked, waiting for your decision',
+    once: 'Run once', always: 'Always allow this command', deny: 'Deny', exec: 'Run', blocked: 'Blocked', allowed: 'Allowed', closed: 'Exit',
+    termTheme: 'Terminal theme: dark / light', dark: 'Dark', light: 'Light', historyEmpty: 'No command history in this session', noCommand: 'No command', collapseHistory: 'Hide history', history: 'History',
+    connect: 'Connect', sessions: 'Sessions', servers: 'Servers', noSessions: 'No sessions', noProfiles: 'No profiles', archivePath: 'Profiles: Settings → ',
+    connectFailed: 'Connection failed:', selectServer: 'Select a server from the left to start a remote session', noProfile: 'No server profile yet — add one in Settings → ', closeRemove: 'Close and remove',
+    rename: 'Rename', remove: 'Remove', disconnectRemove: 'Disconnect and remove', pending: 'Pending',
+    ruleExamples: 'Examples:', serverRules: 'Server rules', ruleHint: 'Matched in order · takes priority over built-ins · applies only to AI commands',
+    ruleHelp1: 'Matches the full command line with * (any text) and ? (one character), case-insensitive, stripping sudo / nohup prefixes.',
+    ruleHelp2: 'First match wins: deny blocks, ask confirms, allow runs directly (allow rules are the whitelist in locked mode).',
+    noCustomRules: 'No custom rules — unmatched commands use built-in rules and the permission level. Add one from the examples below.', addRule: '+ Add rule',
+    editServer: 'Edit server:', newServer: 'New server', name: 'Name', host: 'Host', port: 'Port', user: 'Username', auth: 'Authentication', password: 'Password', key: 'Private key', agent: 'ssh-agent', keyPath: 'Private key path', level: 'Permission level',
+    open: 'open permissive', guarded: 'guarded default', locked: 'locked strict', passwordKeep: 'Configured — leave blank to keep', passwordHint: 'Enter password (stored in encrypted credentials, never in AI sessions)', clearPassword: 'Clear saved password', save: 'Save', cancel: 'Cancel', edit: 'Edit', delete: 'Delete',
+    noServers: 'No server profiles yet. Add one; passwords are stored in DSH encrypted credentials and injected by the plugin, never sent through the AI session.', levels: 'Permission levels', openHelp: '[open] Permissive: commands run directly except built-in deny rules such as rm -rf /.', guardedHelp: '[guarded] Default: dangerous ask rules pause for your confirmation.', lockedHelp: '[locked] Strict: only allow rules run directly; all other commands require confirmation.', requiredFields: 'Name, host, and username are required', invalidPort: 'Port must be an integer from 1 to 65535', emptyRule: 'Rule {n} has an empty command pattern; fill it in or remove it', rulePatternPlaceholder: 'Command pattern, e.g. rm -rf /var/log/*', ruleActionTitle: 'deny blocks / ask confirms / allow runs directly', denyAction: 'deny block', askAction: 'ask confirm', allowAction: 'allow run',
+    exampleAllowTip: 'Allow log cleanup', exampleDenyTip: 'Permanently block force pushes on this server', exampleAskSystemTip: 'Confirm before managing systemd services', exampleAskDockerTip: 'Confirm before deleting containers', newNamePlaceholder: 'production-web-01', hostPlaceholder: '10.0.0.5 or host.example.com', closeSession: 'Session ended:', unknown: 'Unknown reason',
+    passwordConfigured: 'Password stored in credentials', passwordNotConfigured: 'Password not set', connection: 'Connect',
+  }
+}
+function text(key) {
+  var dict = isEnglish() ? COPY.en : COPY.zh
+  return dict[key] || key
+}
+function termLabel() { return text('terminal') }
+function localTerminalLabel() { return text('localTerminal') }
+function currentDeviceLabel() { return text('currentDevice') }
+function newSessionLabel() { return text('newSession') }
+
 var screens = new Map()
 
 // 会话侧栏的显示顺序与拖拽状态。sessOrder 是唯一的渲染顺序来源:
@@ -338,7 +390,7 @@ function TabDot() {
     if (s.agentBusy) busyN++
   })
   return h('span', { className: 'nsh-tabdot' },
-    '远程终端',
+    termLabel(),
     h('span', {
       className: 'nsh-tabdot-dot' + (busyN ? ' nsh-tabdot-busy' : ''),
       style: { background: liveN ? TK.ok : TK.t3 }
@@ -362,8 +414,13 @@ function nshNavGlyph() {
     h('path', { d: 'M8.1 10.6H11.6', stroke: 'currentColor', strokeWidth: 1.25, strokeLinecap: 'round' }))
 }
 
+function TermNavLabel() {
+  useStore()
+  return h('span', { className: 'nsh-nav' }, nshNavGlyph(), termLabel())
+}
+
 function settingsNavLabel() {
-  return h('span', { className: 'nsh-nav' }, nshNavGlyph(), '远程终端')
+  return h(TermNavLabel, null)
 }
 
 function removeSession(id) {
@@ -464,7 +521,7 @@ function discoverSessions() {
       // 已删除的 id 在途读到旧列表时一律不重新加回,避免「删除后闪现」。
       if (si && si.id && removedIds.has(si.id)) continue
       if (si && si.id && !screens.has(si.id)) {
-        var sc = newScreen(si.serverName || '远程终端')
+        var sc = newScreen(si.serverName || termLabel())
         sc.status = si.status || 'connecting'
         screens.set(si.id, sc)
         if (sessOrder.indexOf(si.id) < 0) sessOrder.push(si.id)
@@ -501,6 +558,18 @@ function doConnect(server) {
   store.set({ connectError: null })
   host.call('netshell.connect', { serverId: server.id }).then(function (r) {
     screens.set(r.id, newScreen(server.name))
+    if (sessOrder.indexOf(r.id) < 0) sessOrder.push(r.id)
+    store.set({ activeId: r.id })
+    pollOne(r.id)
+  }).catch(function (e) {
+    store.set({ connectError: String((e && e.message) || e) })
+  })
+}
+
+function doLocalConnect() {
+  store.set({ connectError: null })
+  host.call('netshell.local.connect', {}).then(function (r) {
+    screens.set(r.id, newScreen(localTerminalLabel()))
     if (sessOrder.indexOf(r.id) < 0) sessOrder.push(r.id)
     store.set({ activeId: r.id })
     pollOne(r.id)
@@ -569,7 +638,7 @@ function TermView(props) {
   var view = sc.lines.slice(-400)
   var children = []
   if (sc.dropped > 0) {
-    children.push(h('div', { key: 'drop', className: 'nsh-muted', style: { fontStyle: 'italic' } }, '… 已省略较早的 ' + sc.dropped + ' 行输出'))
+    children.push(h('div', { key: 'drop', className: 'nsh-muted', style: { fontStyle: 'italic' } }, text('omitted') + sc.dropped + text('lines')))
   }
   for (var i = 0; i < view.length; i++) {
     var spans = view[i]
@@ -607,13 +676,13 @@ function PendingBanner(props) {
   if (!sc.pending) return null
   var p = sc.pending
   return h('div', { className: 'nsh-banner' },
-    h('div', { style: { fontWeight: 600, color: TK.warn, marginBottom: 4 } }, '⚠ 危险命令待确认'),
+    h('div', { style: { fontWeight: 600, color: TK.warn, marginBottom: 4 } }, text('dangerPending')),
     h('div', { style: { fontFamily: 'ui-monospace,Menlo,monospace', marginBottom: 2 } }, p.command),
-    h('div', { className: 'nsh-muted', style: { marginBottom: 8 } }, '匹配规则:' + (p.rule || 'locked 模式白名单外') + ' · 已拦截,等待你的决定'),
+    h('div', { className: 'nsh-muted', style: { marginBottom: 8 } }, text('matchedRule') + (p.rule || text('lockedRule')) + text('blockedWaiting')),
     h('div', { style: { display: 'flex', gap: 8 } },
-      h('button', { className: 'nsh-btn nsh-btn-ok', onClick: function () { decide(id, p.id, 'allow') } }, '执行一次'),
-      h('button', { className: 'nsh-btn', onClick: function () { decide(id, p.id, 'always') } }, '永久放行该命令'),
-      h('button', { className: 'nsh-btn nsh-btn-danger', onClick: function () { decide(id, p.id, 'deny') } }, '拒绝')))
+      h('button', { className: 'nsh-btn nsh-btn-ok', onClick: function () { decide(id, p.id, 'allow') } }, text('once')),
+      h('button', { className: 'nsh-btn', onClick: function () { decide(id, p.id, 'always') } }, text('always')),
+      h('button', { className: 'nsh-btn nsh-btn-danger', onClick: function () { decide(id, p.id, 'deny') } }, text('deny'))))
 }
 
 function badgeColor(type) {
@@ -624,10 +693,10 @@ function badgeColor(type) {
 }
 
 function badgeText(type) {
-  if (type === 'exec') return '执行'
-  if (type === 'deny') return '拦截'
-  if (type === 'ask-allow') return '放行'
-  if (type === 'closed') return '退出'
+  if (type === 'exec') return text('exec')
+  if (type === 'deny') return text('blocked')
+  if (type === 'ask-allow') return text('allowed')
+  if (type === 'closed') return text('closed')
   return type
 }
 
@@ -636,9 +705,9 @@ function ThemeButton() {
   var dark = st.termTheme !== 'light'
   return h('button', {
     className: 'nsh-mini',
-    title: '终端配色:深色 / 浅色',
+    title: text('termTheme'),
     onClick: function () { store.set({ termTheme: dark ? 'light' : 'dark' }) }
-  }, dark ? '深色' : '浅色')
+  }, dark ? text('dark') : text('light'))
 }
 
 function HistoryBar(props) {
@@ -650,7 +719,7 @@ function HistoryBar(props) {
   if (sc.showHist) {
     var items = sc.events.slice().reverse()
     rows = h('div', { className: 'nsh-histpanel' },
-      items.length === 0 ? h('div', { className: 'nsh-histrow nsh-muted' }, '本会话还没有命令记录') : items.map(function (ev, i) {
+      items.length === 0 ? h('div', { className: 'nsh-histrow nsh-muted' }, text('historyEmpty')) : items.map(function (ev, i) {
         var t = ev.at ? new Date(ev.at).toTimeString().slice(0, 8) : ''
         return h('div', { key: ev.seq + '-' + i, className: 'nsh-histrow' },
           h('span', { className: 'nsh-time' }, t),
@@ -660,24 +729,27 @@ function HistoryBar(props) {
   }
   return h('div', { className: 'nsh-statuswrap' },
     h('div', { className: 'nsh-statusbar' },
-      h('span', { className: 'nsh-badge', style: badgeColor('exec') }, '执行 ' + sc.nExec),
-      h('span', { className: 'nsh-badge', style: badgeColor('deny') }, '拦截 ' + sc.nDeny),
-      h('span', { className: 'nsh-badge', style: badgeColor('ask-allow') }, '放行 ' + sc.nAsk),
-      h('span', { className: 'nsh-latest' }, latest || '暂无命令'),
+      h('span', { className: 'nsh-badge', style: badgeColor('exec') }, text('exec') + ' ' + sc.nExec),
+      h('span', { className: 'nsh-badge', style: badgeColor('deny') }, text('blocked') + ' ' + sc.nDeny),
+      h('span', { className: 'nsh-badge', style: badgeColor('ask-allow') }, text('allowed') + ' ' + sc.nAsk),
+      h('span', { className: 'nsh-latest' }, latest || text('noCommand')),
       h(ThemeButton, null),
-      h('button', { className: 'nsh-mini' + (sc.showHist ? ' nsh-mini-on' : ''), onClick: toggle }, sc.showHist ? '收起历史' : '历史')),
+      h('button', { className: 'nsh-mini' + (sc.showHist ? ' nsh-mini-on' : ''), onClick: toggle }, sc.showHist ? text('collapseHistory') : text('history'))),
     rows)
 }
 
 function ServerQuickList() {
   var st = useStore()
-  var rows = st.servers.map(function (s) {
+  var rows = [h('div', { key: 'local-terminal', className: 'nsh-row' },
+    h('span', { className: 'nsh-name', style: { minWidth: 100 } }, localTerminalLabel()),
+    h('span', { className: 'nsh-meta', style: { flex: 1 } }, currentDeviceLabel()),
+    h('button', { className: 'nsh-btn nsh-btn-pri', onClick: doLocalConnect }, newSessionLabel()))]
+  rows = rows.concat(st.servers.map(function (s) {
     return h('div', { key: s.id, className: 'nsh-row' },
       h('span', { className: 'nsh-name', style: { minWidth: 100 } }, s.name),
       h('span', { className: 'nsh-meta', style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' } }, s.user + '@' + s.host + ':' + s.port),
-      h('button', { className: 'nsh-btn nsh-btn-pri', onClick: function () { doConnect(s) } }, '连接'))
-  })
-  if (rows.length === 0) return null
+      h('button', { className: 'nsh-btn nsh-btn-pri', onClick: function () { doConnect(s) } }, text('connect')))
+  }))
   return h('div', { className: 'nsh-rows', style: { width: '100%', maxWidth: 460 } }, rows)
 }
 
@@ -765,15 +837,15 @@ function SessionRow(props) {
   },
     h('span', { className: 'nsh-dot', style: { background: statusColor(s.status) } }),
     h('span', { className: 'nsh-srow-main' }, s.label || s.serverName),
-    s.pending ? h('span', { className: 'nsh-badge', style: badgeColor('ask-allow') }, '待确认') : null,
+    s.pending ? h('span', { className: 'nsh-badge', style: badgeColor('ask-allow') }, text('pending')) : null,
     h('span', { className: 'nsh-srow-actions' },
       h('button', {
-        className: 'nsh-mini-x', title: '重命名',
+        className: 'nsh-mini-x', title: text('rename'),
         onClick: function (e) { e.stopPropagation(); setEditing(s.label || s.serverName) }
       }, '✎'),
       h('button', {
         className: 'nsh-mini-x',
-        title: s.status === 'closed' ? '移除' : '断开并移除',
+        title: s.status === 'closed' ? text('remove') : text('disconnectRemove'),
         onClick: function (e) { e.stopPropagation(); removeSession(id) }
       }, '✕')))
 }
@@ -787,12 +859,17 @@ function sideSessionRows() {
 }
 
 function sideServerRows(st) {
-  return st.servers.map(function (s) {
+  var local = h('div', { key: 'local-terminal', className: 'nsh-srow', onClick: doLocalConnect, title: newSessionLabel() + ' ' + localTerminalLabel() },
+    h('span', { className: 'nsh-dot', style: { background: TK.ok } }),
+    h('span', { className: 'nsh-srow-main' }, localTerminalLabel()),
+    h('span', { className: 'nsh-meta' }, newSessionLabel()))
+  var remote = st.servers.map(function (s) {
     return h('div', { key: s.id, className: 'nsh-srow', onClick: function () { doConnect(s) }, title: s.user + '@' + s.host + ':' + s.port },
       h('span', { className: 'nsh-dot', style: { background: TK.t3 } }),
       h('span', { className: 'nsh-srow-main' }, s.name),
-      h('span', { className: 'nsh-meta' }, '连接'))
+      h('span', { className: 'nsh-meta' }, text('connection')))
   })
+  return [local].concat(remote)
 }
 
 function NetshellView() {
@@ -807,22 +884,22 @@ function NetshellView() {
   var sc = activeId ? screens.get(activeId) : null
   var side = h('aside', { className: 'nsh-side' },
     h('div', { className: 'nsh-side-scroll' },
-      sideSection('会话', sideSessionRows(), '暂无会话'),
-      sideSection('服务器', sideServerRows(st), '暂无档案')),
-    h('div', { className: 'nsh-side-foot' }, '档案管理:设置 → 远程终端'))
+      sideSection(text('sessions'), sideSessionRows(), text('noSessions')),
+      sideSection(text('servers'), sideServerRows(st), text('noProfiles'))),
+    h('div', { className: 'nsh-side-foot' }, text('archivePath') + termLabel()))
   var main
   if (!sc) {
     main = h('div', { className: 'nsh-empty' },
-      st.connectError ? h('div', { style: { color: TK.err } }, '连接失败:' + st.connectError) : null,
-      h('div', { className: 'nsh-muted' }, st.servers.length ? '从左侧选择一个服务器开始远程会话' : '还没有服务器档案 — 在「设置 → 远程终端」中新增'),
+      st.connectError ? h('div', { style: { color: TK.err } }, text('connectFailed') + st.connectError) : null,
+      h('div', { className: 'nsh-muted' }, st.servers.length ? text('selectServer') : (isEnglish() ? text('noProfile') + termLabel() + '.' : text('noProfile') + termLabel() + '」中新增')),
       h(ServerQuickList, null))
   } else {
     main = h('div', { className: 'nsh-session' },
+      h(HistoryBar, { sc: sc }),
       sc.hint && sc.status !== 'closed' ? h('div', { className: 'nsh-hintline' }, sc.hint) : null,
       h(PendingBanner, { sc: sc, id: activeId }),
       h(TermView, { sc: sc, id: activeId, key: activeId }),
-      sc.status === 'closed' ? h('div', { className: 'nsh-closedline' }, h('span', null, '会话已结束:' + (sc.closedReason || '未知原因')), h('button', { className: 'nsh-btn nsh-btn-sm', onClick: function () { removeSession(activeId) } }, '关闭并移除')) : null,
-      h(HistoryBar, { sc: sc }))
+      sc.status === 'closed' ? h('div', { className: 'nsh-closedline' }, h('span', null, text('closed') + ': ' + (sc.closedReason || text('closed'))), h('button', { className: 'nsh-btn nsh-btn-sm', onClick: function () { removeSession(activeId) } }, text('closeRemove'))) : null)
   }
   return h('div', { className: 'nsh-root', 'data-conversation-composer-overlay': '' },
     h('div', { className: 'nsh-split' }, side, h('section', { className: 'nsh-main' }, main)))
@@ -844,10 +921,10 @@ function ruleActionColor(action) {
 // 完整命令行通配匹配(* / ?,大小写不敏感,自动剥 sudo/nohup 等前缀),
 // 从上到下先命中先生效;服务器规则整体优先于内置规则库。
 var RULE_EXAMPLES = [
-  { pattern: 'rm -rf /var/log/*', action: 'allow', tip: '放行日志清理:服务器规则优先于内置规则库,rm -rf /var/log/* 不再弹确认' },
-  { pattern: 'git push --force*', action: 'deny', tip: '本服务器永久禁止强推,连确认机会都没有' },
-  { pattern: 'systemctl *', action: 'ask', tip: '管理 systemd 服务前先确认' },
-  { pattern: 'docker rm *', action: 'ask', tip: '删除容器前先确认' }
+  { pattern: 'rm -rf /var/log/*', action: 'allow', tipKey: 'exampleAllowTip' },
+  { pattern: 'git push --force*', action: 'deny', tipKey: 'exampleDenyTip' },
+  { pattern: 'systemctl *', action: 'ask', tipKey: 'exampleAskSystemTip' },
+  { pattern: 'docker rm *', action: 'ask', tipKey: 'exampleAskDockerTip' }
 ]
 
 function ServerEditor(props) {
@@ -870,12 +947,12 @@ function ServerEditor(props) {
     setDraft(next)
   }
   var save = function () {
-    if (!draft.name || !draft.host || !draft.user) { setErr('名称、主机、用户名为必填项'); return }
+    if (!draft.name || !draft.host || !draft.user) { setErr(text('requiredFields')); return }
     var port = parseInt(String(draft.port || '22'), 10)
-    if (!(port >= 1 && port <= 65535)) { setErr('端口必须是 1-65535 的整数'); return }
+    if (!(port >= 1 && port <= 65535)) { setErr(text('invalidPort')); return }
     var rl = draft.rules || []
     for (var ri = 0; ri < rl.length; ri++) {
-      if (!rl[ri] || !String(rl[ri].pattern || '').replace(/^\s+|\s+$/g, '')) { setErr('第 ' + (ri + 1) + ' 条规则的命令模式为空,请填写或删除该行'); return }
+      if (!rl[ri] || !String(rl[ri].pattern || '').replace(/^\s+|\s+$/g, '')) { setErr(text('emptyRule').replace('{n}', String(ri + 1))); return }
     }
     var payload = { server: draft }
     if (password) payload.password = password
@@ -892,7 +969,7 @@ function ServerEditor(props) {
         className: 'nsh-in',
         style: { flex: '1 1 0', minWidth: 0, fontFamily: 'ui-monospace,Menlo,Consolas,monospace' },
         value: r.pattern,
-        placeholder: '命令通配,如 rm -rf /var/log/*',
+        placeholder: text('rulePatternPlaceholder'),
         onChange: function (e) {
           var rules = draft.rules.slice()
           rules[i] = { pattern: e.target.value, action: r.action }
@@ -903,38 +980,38 @@ function ServerEditor(props) {
         className: 'nsh-in',
         style: { flex: 'none', width: 118 },
         value: r.action || 'ask',
-        title: 'deny 直接拦截 / ask 执行前确认 / allow 直接放行',
+        title: text('ruleActionTitle'),
         onChange: function (e) {
           var rules = draft.rules.slice()
           rules[i] = { pattern: r.pattern, action: e.target.value }
           upd({ rules: rules })
         }
       },
-        h('option', { value: 'deny' }, 'deny 拦截'),
-        h('option', { value: 'ask' }, 'ask 确认'),
-        h('option', { value: 'allow' }, 'allow 放行')),
+        h('option', { value: 'deny' }, text('denyAction')),
+        h('option', { value: 'ask' }, text('askAction')),
+        h('option', { value: 'allow' }, text('allowAction'))),
       h('button', {
-        className: 'nsh-rx', title: '删除该规则',
+        className: 'nsh-rx', title: text('delete'),
         onClick: function () { var rules = draft.rules.slice(); rules.splice(i, 1); upd({ rules: rules }) }
       }, '✕'))
   })
   var rulesSection = h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
     h('div', { style: { display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' } },
-      h('span', { className: 'nsh-lb' }, '服务器规则'),
-      h('span', { className: 'nsh-cap' }, '按顺序匹配 · 优先于内置规则库 · 只约束 AI 执行的命令')),
+      h('span', { className: 'nsh-lb' }, text('serverRules')),
+      h('span', { className: 'nsh-cap' }, text('ruleHint'))),
     h('p', { className: 'nsh-cap', style: { margin: 0 } },
-      '匹配完整命令行:支持 * (任意字符) 与 ? (单字符) 通配,不区分大小写,自动剥除 sudo / nohup 等前缀。',
-      '从上到下先命中先生效:deny 直接拦截;ask 执行前弹确认;allow 直接放行(locked 模式下即白名单)。'),
+      text('ruleHelp1'),
+      text('ruleHelp2')),
     (draft.rules || []).length
       ? h('div', { className: 'nsh-rules' }, ruleRows)
-      : h('div', { className: 'nsh-rempty' }, '暂无自定义规则 — 未命中的命令按内置规则库 + 权限等级处理。可从下方示例一键添加。'),
+      : h('div', { className: 'nsh-rempty' }, text('noCustomRules')),
     h('div', { className: 'nsh-chips' },
-      h('span', { className: 'nsh-cap', style: { flex: 'none' } }, '示例:'),
+      h('span', { className: 'nsh-cap', style: { flex: 'none' } }, text('ruleExamples')),
       RULE_EXAMPLES.map(function (ex, i) {
         return h('button', {
           key: i,
           className: 'nsh-chip',
-          title: ex.tip,
+          title: text(ex.tipKey),
           onClick: function () {
             var rules = (draft.rules || []).slice()
             rules.push({ pattern: ex.pattern, action: ex.action })
@@ -947,48 +1024,48 @@ function ServerEditor(props) {
     h('button', {
       className: 'nsh-btn nsh-btn-sm', style: { alignSelf: 'flex-start' },
       onClick: function () { var rules = (draft.rules || []).slice(); rules.push({ pattern: '', action: 'ask' }); upd({ rules: rules }) }
-    }, '+ 添加规则'))
+    }, text('addRule')))
   return h('div', { className: 'nsh-editor' },
-    h('div', { className: 'nsh-title2', style: { fontSize: 14 } }, draft.id ? '编辑服务器:' + draft.name : '新增服务器'),
+    h('div', { className: 'nsh-title2', style: { fontSize: 14 } }, draft.id ? text('editServer') + draft.name : text('newServer')),
     h('div', { className: 'nsh-grid' },
-      h(Field, { label: '名称' },
-        h('input', { className: 'nsh-in', value: draft.name || '', onChange: function (e) { upd({ name: e.target.value }) }, placeholder: '生产-web-01' })),
-      h(Field, { label: '主机', grow: true },
-        h('input', { className: 'nsh-in', value: draft.host || '', onChange: function (e) { upd({ host: e.target.value }) }, placeholder: '10.0.0.5 或 host.example.com' })),
-      h(Field, { label: '端口' },
+      h(Field, { label: text('name') },
+        h('input', { className: 'nsh-in', value: draft.name || '', onChange: function (e) { upd({ name: e.target.value }) }, placeholder: text('newNamePlaceholder') })),
+      h(Field, { label: text('host'), grow: true },
+        h('input', { className: 'nsh-in', value: draft.host || '', onChange: function (e) { upd({ host: e.target.value }) }, placeholder: text('hostPlaceholder') })),
+      h(Field, { label: text('port') },
         h('input', { className: 'nsh-in', value: String(draft.port || 22), onChange: function (e) { upd({ port: e.target.value }) } })),
-      h(Field, { label: '用户名' },
+      h(Field, { label: text('user') },
         h('input', { className: 'nsh-in', value: draft.user || '', onChange: function (e) { upd({ user: e.target.value }) } }))),
     h('div', { className: 'nsh-grid' },
-      h(Field, { label: '认证方式' },
+      h(Field, { label: text('auth') },
         h('select', { className: 'nsh-in', value: draft.auth || 'password', onChange: function (e) { upd({ auth: e.target.value }) } },
-          h('option', { value: 'password' }, '密码'),
-          h('option', { value: 'key' }, '私钥'),
-          h('option', { value: 'agent' }, 'ssh-agent'))),
+          h('option', { value: 'password' }, text('password')),
+          h('option', { value: 'key' }, text('key')),
+          h('option', { value: 'agent' }, text('agent')))),
       draft.auth === 'key'
-        ? h(Field, { label: '私钥路径', grow: true },
+        ? h(Field, { label: text('keyPath'), grow: true },
           h('input', { className: 'nsh-in', value: draft.keyPath || '', onChange: function (e) { upd({ keyPath: e.target.value }) }, placeholder: '~/.ssh/id_ed25519' }))
         : null,
-      h(Field, { label: '权限等级' },
+      h(Field, { label: text('level') },
         h('select', { className: 'nsh-in', value: draft.level || 'guarded', onChange: function (e) { upd({ level: e.target.value }) } },
-          h('option', { value: 'open' }, 'open 宽松'),
-          h('option', { value: 'guarded' }, 'guarded 默认'),
-          h('option', { value: 'locked' }, 'locked 严格')))),
+          h('option', { value: 'open' }, text('open')),
+          h('option', { value: 'guarded' }, text('guarded')),
+          h('option', { value: 'locked' }, text('locked'))))),
     draft.auth === 'password'
       ? h('div', { className: 'nsh-grid', style: { alignItems: 'flex-end' } },
-        h(Field, { label: '密码', grow: true },
-          h('input', { className: 'nsh-in', type: 'password', value: password, onChange: function (e) { setPassword(e.target.value) }, placeholder: draft.hasPassword ? '已设置 — 留空保持不变' : '输入密码(存入加密凭据库,不经 AI 会话)' })),
+        h(Field, { label: text('password'), grow: true },
+          h('input', { className: 'nsh-in', type: 'password', value: password, onChange: function (e) { setPassword(e.target.value) }, placeholder: draft.hasPassword ? text('passwordKeep') : text('passwordHint') })),
         draft.hasPassword
           ? h('label', { style: { display: 'flex', alignItems: 'center', gap: 5, paddingBottom: 6, fontSize: 12, color: TK.ls } },
             h('input', { type: 'checkbox', checked: clearPw, onChange: function (e) { setClearPw(e.target.checked) } }),
-            '清除已存密码')
+            text('clearPassword'))
           : null)
       : null,
     rulesSection,
     err ? h('p', { className: 'nsh-err' }, err) : null,
     h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
-      h('button', { className: 'nsh-btn nsh-btn-pri', onClick: save }, '保存'),
-      h('button', { className: 'nsh-btn', onClick: props.onDone }, '取消')))
+      h('button', { className: 'nsh-btn nsh-btn-pri', onClick: save }, text('save')),
+      h('button', { className: 'nsh-btn', onClick: props.onDone }, text('cancel'))))
 }
 
 function SettingsPage(props) {
@@ -1000,14 +1077,14 @@ function SettingsPage(props) {
   }
   var rows = st.servers.map(function (s) {
     return h('div', { key: s.id, className: 'nsh-row' },
-      h('span', { className: 'nsh-dot', style: { background: s.hasPassword ? TK.ok : TK.t3 }, title: s.hasPassword ? '密码已存入凭据库' : '未设置密码' }),
+      h('span', { className: 'nsh-dot', style: { background: s.hasPassword ? TK.ok : TK.t3 }, title: s.hasPassword ? text('passwordConfigured') : text('passwordNotConfigured') }),
       h('div', { className: 'nsh-identity', style: { minWidth: 0 } },
         h('span', { className: 'nsh-name', style: { maxWidth: 140 } }, s.name),
-        h('span', { className: 'nsh-pill' }, s.level || 'guarded')),
+        h('span', { className: 'nsh-pill' }, text(s.level || 'guarded'))),
       h('span', { className: 'nsh-meta', style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' } }, s.user + '@' + s.host + ':' + s.port),
       h('span', { className: 'nsh-actions' },
-        h('button', { className: 'nsh-btn nsh-btn-pri nsh-btn-sm', onClick: function () { doConnect(s) } }, '连接'),
-        h('button', { className: 'nsh-btn nsh-btn-sm', onClick: function () { store.set({ editing: s }) } }, '编辑'),
+        h('button', { className: 'nsh-btn nsh-btn-pri nsh-btn-sm', onClick: function () { doConnect(s) } }, text('connection')),
+        h('button', { className: 'nsh-btn nsh-btn-sm', onClick: function () { store.set({ editing: s }) } }, text('edit')),
         h('button', {
           className: 'nsh-btn nsh-btn-danger nsh-btn-sm',
           onClick: function () {
@@ -1015,29 +1092,35 @@ function SettingsPage(props) {
               .then(function () { return refreshServers() })
               .catch(function () {})
           }
-        }, '删除')))
+        }, text('delete'))))
   })
   return h('div', { className: 'nsh-section' },
     h('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
-      h('h2', { className: 'nsh-title2' }, '服务器'),
+      h('h2', { className: 'nsh-title2' }, text('servers')),
       h('span', { style: { flex: 1 } }),
-      h('button', { className: 'nsh-btn nsh-btn-pri', onClick: function () { store.set({ editing: { name: '', host: '', port: 22, user: 'root', auth: 'password', level: 'guarded', rules: [] } }) } }, '+ 新增')),
+      h('button', { className: 'nsh-btn nsh-btn-pri', onClick: function () { store.set({ editing: { name: '', host: '', port: 22, user: 'root', auth: 'password', level: 'guarded', rules: [] } }) } }, '+ ' + text('newSession'))),
     rows.length === 0
-      ? h('div', { style: { border: '1px dashed ' + TK.b3, borderRadius: 12, padding: 20, textAlign: 'center', color: TK.t3, fontSize: 13, lineHeight: '20px' } }, '还没有服务器档案。新增一个,密码会存入 DSH 加密凭据库,连接时由插件直接注入,完全不经过 AI 会话。')
+      ? h('div', { style: { border: '1px dashed ' + TK.b3, borderRadius: 12, padding: 20, textAlign: 'center', color: TK.t3, fontSize: 13, lineHeight: '20px' } }, text('noServers'))
       : h('div', { className: 'nsh-rows' }, rows),
     h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
-      h('h2', { className: 'nsh-title2', style: { fontSize: 14, marginBottom: 2 } }, '权限等级说明'),
-      h('p', { className: 'nsh-cap' }, '[open] 宽松:所有命令直接放行,仅内置 deny 规则(如 rm -rf /)硬拦截。'),
-      h('p', { className: 'nsh-cap' }, '[guarded] 默认:命中 ask 规则的危险命令会被拦下,弹出确认后由你决定是否执行。'),
-      h('p', { className: 'nsh-cap' }, '[locked] 严格:只有规则表中 allow 的命令直接执行,其余一律先询问。')))
+      h('h2', { className: 'nsh-title2', style: { fontSize: 14, marginBottom: 2 } }, text('levels')),
+      h('p', { className: 'nsh-cap' }, text('openHelp')),
+      h('p', { className: 'nsh-cap' }, text('guardedHelp')),
+      h('p', { className: 'nsh-cap' }, text('lockedHelp'))))
 }
 
 return {
-  inject: ['timer'],
+  inject: ['timer', 'locale'],
   apply: function (ctx) {
     var slots = ctx.get('slots')
     if (slots === undefined) return
     var timer = ctx.timer
+    localeService = ctx.locale || ctx.get('locale')
+    if (localeService) {
+      ctx.effect(function () {
+        return localeService.subscribe(function () { store.set({ tick: store.st.tick + 1 }) })
+      })
+    }
     styles.insert(CSS)
     ctx.effect(function () {
       return timer.interval(function () {
