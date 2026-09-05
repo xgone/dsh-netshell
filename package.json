@@ -13,7 +13,13 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
+    "UPDATES.md",
+    "TECHNICAL.md",
+    "DYNAMIC.md",
+    "DESIGN.zh.md",
     "CHANGELOG.md",
+    "assets",
     "LICENSE"
   ],
   "scripts": {

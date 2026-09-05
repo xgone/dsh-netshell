@@ -1,5 +1,7 @@
 # DSH-NetShell
 
+[English](README.en.md) · [中文](README.md)
+
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Guarded local and remote SSH terminal" width="720" />
 </p>

@@ -12,7 +12,7 @@
 | Host | `src/nsh-host.js`(约 816 行) | `harness` | `['subprocess', 'credentials', 'timer']` | `{ inject, apply }` |
 | Client | `src/nsh-client.js`(约 1140 行,0.3.0 起全文件多行化) | `React`、`host`、`styles` | `['timer', 'locale']`,内部 `ctx.get('slots')` | `{ inject, apply }` |
 
-- Host 通过 `harness.handle(...)` 注册 8 个 Client→Host RPC(`netshell.profiles.list/save/delete`、`netshell.connect`、`netshell.local.connect`、`netshell.sessions.list`、`netshell.input`、`netshell.poll`、`netshell.decide`、`netshell.disconnect`),并用 `harness.defineTool` + `harness.registerTool(ctx, t)` 注册两个模型工具。
+- Host 通过 `harness.handle(...)` 注册 10 个 Client→Host RPC(`netshell.profiles.list/save/delete`、`netshell.connect`、`netshell.local.connect`、`netshell.sessions.list`、`netshell.input`、`netshell.poll`、`netshell.decide`、`netshell.disconnect`),并用 `harness.defineTool` + `harness.registerTool(ctx, t)` 注册两个模型工具。
 - Client 注册两个 Slot:`conversation.view`(id `netshell`, order 20,主区域「远程终端」Tab,「对话 / 轨迹」右侧)、`settings.section`(id `netshell`, order 50)。
 - **不要**用静态包 `lib/index.js` / `lib/client.js` 做动态加载——那是带 shim 的 ESM 生成物,动态沙箱不认 `import`。
 

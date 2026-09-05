@@ -233,10 +233,18 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 
 - **包形态**:`package.json` 声明 `exports["./client"]` + `dsh.client`(`platform: web`)+ `dsh.bundle.patch` —— 这是 DSH client-modules 系统扫描浏览器半区、以及 profile launcher 识别 bundle 的契约(参照:`@deepseek-ai/dsh-client-modules` 的扫描逻辑与本仓库 cordis.patch.yml)。注意 `dsh.client.inject` 的语义是**依赖的 client 包名**(模块表到达顺序边),而模块自身 `export const inject = [...]` 是**服务名**——两层不要混淆;本包前者为 `[]`(slots/react 由既有启动图提供)。
 - **安装**:本机 profile 是 `~/.dsh/profiles/web`(pnpm workspace,patch 层为其中的 `cordis.patch.yml`)。`dsh plugin --profile web add link:<路径>` 会 pnpm 安装并自动把 bundle 追加进 `dsh.profile.bundles`(透明转发 pnpm + 按安装状态对账);模块解析是双锚(先 dsh 安装目录、后 profile 目录)。
-- **宿主半区服务**:`inject: ['subprocess', 'credentials', 'timer', 'tools', 'webServer']`(base bundle 提供同名服务行);RPC 走自注册 HTTP 路由(与 `@xgone/dsh-remote` 同一模式,auth gate 覆盖所有已注册及后注册路由)。**有意未走** `/api` 通用平面:`namespace/<method>` 派发要求宿主半区 `TypertRemoteService` + `@Remote` 标记,且浏览器半区必须挂载 `@deepseek-ai/dsh-typert-generator` 生成的严格 codec 描述符(`./remote` 产物 + `ctx.remote.$mount`)—— machinery 过重,对本插件的 9 个 JSON RPC 不划算;若未来需要流式/强 schema,再迁。
+- **宿主半区服务**:`inject: ['subprocess', 'credentials', 'timer', 'tools', 'webServer']`(base bundle 提供同名服务行);RPC 走自注册 HTTP 路由(与 `@xgone/dsh-remote` 同一模式,auth gate 覆盖所有已注册及后注册路由)。**有意未走** `/api` 通用平面:`namespace/<method>` 派发要求宿主半区 `TypertRemoteService` + `@Remote` 标记,且浏览器半区必须挂载 `@deepseek-ai/dsh-typert-generator` 生成的严格 codec 描述符(`./remote` 产物 + `ctx.remote.$mount`)—— machinery 过重,对本插件的 10 个 JSON RPC 不划算;若未来需要流式/强 schema,再迁。
 - **浏览器半区**:工厂形式 `window.__ModuleLoader__.load({ id, factory(require) })`,依赖经 `require('react')` 注入;不使用 `eval`/`new Function`,源码以真实代码内联(无 CSP 风险)。
 
-## 12. 路线图(DESIGN 分期 + 本文暴露的技术债)
+## 12. npm 发布
+
+- 工作流位于 `.github/workflows/npm-publish.yml`。
+- 在 GitHub 仓库的 `Settings → Secrets and variables → Actions` 中配置 `NPM_TOKEN`，只在发布步骤注入。
+- 创建 GitHub Release 时，Release tag 去掉可选的 `v` 前缀后必须与 `package.json` 的 `version` 完全一致；否则工作流会在发布前失败。
+- `workflow_dispatch` 可手动发布当前分支上的包版本，发布前仍会执行 `pnpm test`。
+- npm 包的 `files` 白名单包含双语 README、技术文档和 `assets/`，保证 npm 页面中的文档图片可用。
+
+## 13. 路线图(DESIGN 分期 + 本文暴露的技术债)
 
 - 增量 poll:启用 `nextCursor` 游标,减少带宽与面板 re-render;
 - 工具命令走交互 PTY:复活 `runOnSession`,让 `netshell_run` 真实回显交互(当前 allow 路径是独立 `ssh -T`);

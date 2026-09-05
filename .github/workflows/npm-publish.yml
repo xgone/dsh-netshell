@@ -1,0 +1,50 @@
+name: Publish npm package
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Test and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Verify release version
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./package.json').version")"
+          release_version="${GITHUB_REF_NAME#v}"
+          test "$package_version" = "$release_version" \
+            || { echo "package.json is $package_version but the release tag is $GITHUB_REF_NAME" >&2; exit 1; }
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

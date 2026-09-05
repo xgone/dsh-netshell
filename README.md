@@ -1,5 +1,7 @@
 # DSH-NetShell
 
+[中文](README.md) · [English](README.en.md)
+
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — 受保护的本地与远程 SSH 终端" width="720" />
 </p>
