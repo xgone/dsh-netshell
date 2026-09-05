@@ -10,9 +10,9 @@
 | 半区 | 文件 | 自由变量(沙箱 builtin,勿传参) | inject 依赖 | 返回 |
 |------|------|------|------|------|
 | Host | `src/nsh-host.js`(约 816 行) | `harness` | `['subprocess', 'credentials', 'timer']` | `{ inject, apply }` |
-| Client | `src/nsh-client.js`(约 700 行,0.3.0 起全文件多行化) | `React`、`host`、`styles` | `['timer']`,内部 `ctx.get('slots')` | `{ inject, apply }` |
+| Client | `src/nsh-client.js`(约 1140 行,0.3.0 起全文件多行化) | `React`、`host`、`styles` | `['timer', 'locale']`,内部 `ctx.get('slots')` | `{ inject, apply }` |
 
-- Host 通过 `harness.handle(...)` 注册 7 个 Client→Host RPC(`netshell.profiles.list/save/delete`、`netshell.connect`、`netshell.sessions.list`、`netshell.input`、`netshell.poll`、`netshell.decide`、`netshell.disconnect`),并用 `harness.defineTool` + `harness.registerTool(ctx, t)` 注册两个模型工具。
+- Host 通过 `harness.handle(...)` 注册 8 个 Client→Host RPC(`netshell.profiles.list/save/delete`、`netshell.connect`、`netshell.local.connect`、`netshell.sessions.list`、`netshell.input`、`netshell.poll`、`netshell.decide`、`netshell.disconnect`),并用 `harness.defineTool` + `harness.registerTool(ctx, t)` 注册两个模型工具。
 - Client 注册两个 Slot:`conversation.view`(id `netshell`, order 20,主区域「远程终端」Tab,「对话 / 轨迹」右侧)、`settings.section`(id `netshell`, order 50)。
 - **不要**用静态包 `lib/index.js` / `lib/client.js` 做动态加载——那是带 shim 的 ESM 生成物,动态沙箱不认 `import`。
 
@@ -52,7 +52,7 @@
 4. **逐字节一致是硬要求**,凭印象改写必错。本次实际踩中的三处:
    - client CSS 行(第 6 行)结尾是 `+ TK.t3 + '}'`——**单个**右花括号,多写一个就是 SyntaxError;
    - host 的 makeAskpass(第 294 行)是 `+ BACK + 'n" "$NETSHELL_PW"'`——JS 字面量里**没有**反斜杠,`\n` 由运行时的 `BACK = String.fromCharCode(92)` 拼出;多转义会让 askpass 输出坏掉、密码认证失败;
-   - client 末行(第 134 行)必须完整保留 `return { inject: ['timer'], apply: function (ctx) { … } }`——丢了它,client 半区求值返回 `undefined`,报 "client half returned `undefined`"。
+   - client 末行必须完整保留 `return { inject: ['timer', 'locale'], apply: function (ctx) { … } }`——丢了它,client 半区求值返回 `undefined`,报 "client half returned `undefined`"。
 5. **Client 半区的求值结果是函数体返回值**。报 "returned `undefined`" 十有八九是末尾的 `return {…}` 行没抄全或被截断。
 6. **内联 JSON 里不含反引号**(两个源文件都遵守此约定),但没有别的特殊字符顾虑;超大参数(两半区合计约 60KB)可以一次传完,不要试图省略注释或压缩改写。
 7. **每个新 packageId 都需要 UI 批准**(单勾只授权当前包)。批准前 run 返回 `awaiting-approval` 属正常,**不要重试,等用户点击**;用户拒绝后不要再发。

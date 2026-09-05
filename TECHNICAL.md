@@ -32,7 +32,8 @@
 | `test/smoke.mjs` | 端到端冒烟:桩服务驱动两个生成半区 + 真实 HTTP RPC(12 项断言) |
 | `DESIGN.zh.md` | 设计方案,§9 的宿主契约调研仍有效 |
 | `TECHNICAL.md` | 本文 |
-| `CHANGELOG.md` | 更新记录 |
+| `UPDATES.md` | 面向使用者的更新记录 |
+| `CHANGELOG.md` | 完整历史与实现变更记录 |
 
 两个 `src/` 源文件均以 `var …; return { inject: [...], apply(ctx) { … } }` 结尾——这是**动态沙箱的函数体求值**格式;`build.mjs` 把整份源码原样内联进一个 IIFE,因此业务逻辑只有一份,模式差异全部收敛在生成物的 shim 里:
 
@@ -58,7 +59,7 @@
   - `credentials.readRecord / modifyRecord / describe / resolve / set / unset`:档案与密码的持久化(§4);
   - `harness.handle(method, fn)`:注册 RPC;`harness.defineTool` + `harness.registerTool`:注册模型工具;
   - `timer.timeout / interval`:轮询与等待。
-- **Client** 可用:`React`(代码风格为 `var x = React.useState(...)` 解构前写法)、`host.call`、`styles.insert`、`ctx.get('slots')`、`console`;slots:`conversation.view`(主区域 Tab,list-kind,`data-conversation-composer-overlay` 定高模式)、`settings.section`(设置页)。
+- **Client** 可用:`React`(代码风格为 `var x = React.useState(...)` 解构前写法)、`host.call`、`styles.insert`、`ctx.get('slots')`、`ctx.get('locale')`、`console`;slots:`conversation.view`(主区域 Tab,list-kind,`data-conversation-composer-overlay` 定高模式)、`settings.section`(设置页)。
 - 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现。
 
 ## 4. 数据与持久化(为什么没有配置文件)
@@ -86,6 +87,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 | `netshell.profiles.save` | `{ server, password?, clearPassword? }` | `{ server }` | 新建 / 更新;`password` 非空则写凭据,`clearPassword` 则删除;校验必填项与端口 1–65535 |
 | `netshell.profiles.delete` | `{ id }` | `{ ok: true }` | 删档案 + 删凭据 + 终止该服务器活跃会话 |
 | `netshell.connect` | `{ serverId }` | `{ id, pid }` | 每次都 spawn 新会话 |
+| `netshell.local.connect` | `{}` | `{ id, pid }` | 自动选择本机可用 shell 并创建独立本地会话 |
 | `netshell.input` | `{ id, data }` | `{ ok: true }` | 键盘输入,单次 ≤4096 字符;pending 期间整体丢弃;**内嵌 `\r`/`\n` 的多字符 data 强制拆段送入 Guard**(§6.1),不存在绕过拦截的输入形态 |
 | `netshell.poll` | `{ id }` | `{ status, output, lossy, dropped, nextCursor, events, pending, hint, closedReason, atPwPrompt, cols, rows }` | **全量快照**(见下) |
 | `netshell.decide` | `{ id, pendingId, action: 'allow'\|'always'\|'deny' }` | `{ ok: true }` | 对挂起命令做裁决;人工挂起(`from: 'line'`)按原行为向 PTY 写 `\r`/`\u0015`,工具挂起(`from: 'tool'`)只记账到确认令牌,不动 PTY |
