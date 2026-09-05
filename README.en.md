@@ -3,18 +3,30 @@
 [English](README.en.md) · [中文](README.md)
 
 <p align="center">
+  <a href="https://github.com/xgone/dsh-netshell/actions/workflows/ci.yml"><img src="https://github.com/xgone/dsh-netshell/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://www.npmjs.com/package/@xgone/dsh-netshell"><img src="https://img.shields.io/npm/v/%40xgone%2Fdsh-netshell?logo=npm&logoColor=white" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@xgone/dsh-netshell"><img src="https://img.shields.io/npm/dm/%40xgone%2Fdsh-netshell?logo=npm&logoColor=white" alt="npm downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f.svg?logo=opensourceinitiative&logoColor=white" alt="MIT License" /></a>
+</p>
+
+<p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Guarded local and remote SSH terminal" width="720" />
 </p>
 
-DSH-NetShell brings a local shell and guarded SSH sessions into DeepSeek Harness. Manage server profiles, watch live output, and let the AI run commands through a controlled tool. High-risk commands pause until you approve them.
+<p align="center"><strong>A guarded local and remote SSH terminal for DeepSeek Harness</strong></p>
 
-## Why It Exists
+DSH-NetShell lets you manage servers, use a live terminal, and keep a clear human checkpoint before risky commands run in DSH. Human input and AI actions share the same command guard.
 
-An AI-assisted terminal needs more than an SSH connection:
+## Highlights
 
-- **Visibility**: human input and AI commands appear in the same live terminal panel.
-- **A checkpoint**: destructive operations pause before they run.
-- **Credential isolation**: SSH passwords stay in the DSH encrypted credential store and never enter AI messages, tool results, or logs.
+| Capability | What you get |
+| --- | --- |
+| Local terminal | Start `bash`, `sh`, PowerShell, or `cmd` on the current device without SSH setup |
+| Remote SSH | Manage hosts, ports, users, and authentication with multiple sessions |
+| Command guard | `allow` runs immediately, `ask` waits for approval, `deny` blocks |
+| Visible execution | Human input and AI commands appear in the same live terminal panel |
+| Credential isolation | SSH passwords stay in DSH's encrypted store and never enter AI messages, tool results, or logs |
+| Command history | Review run, blocked, and allowed counts plus every decision record |
 
 ## Install
 
@@ -30,54 +42,47 @@ From a local checkout:
 dsh plugin --profile web add link:/path/to/dsh-netshell
 ```
 
-Restart DSH Web after installation. Open **Settings → Terminal**; the plugin section confirms that it is loaded.
+Restart DSH Web after installation, then open **Settings → Terminal**.
 
-## How To Use It
+## Quickstart
 
-### 1. Try the local terminal
+### Local terminal
 
-Open the **Terminal** tab in the main area. In the left panel, click **New** on the **Local terminal** row. NetShell selects an available `bash`, `sh`, PowerShell, or `cmd` on the current device. It does not read remote profiles or SSH passwords.
+1. Open the **Terminal** tab in the main area.
+2. Click **New** on the **Local terminal** row.
+3. Type commands and watch the live output.
 
-### 2. Add a remote server
+The local terminal does not read remote profiles or SSH passwords.
 
-Open **Settings → Terminal → New** and enter:
+### Remote server
 
-1. Name, host, port, and username;
-2. An authentication method: password, private key, or `ssh-agent`;
-3. A permission level; keep the default `guarded` for a first connection;
-4. Optional server-specific rules.
+1. Open **Settings → Terminal → New**.
+2. Enter a name, host, port, and username.
+3. Choose password, private key, or `ssh-agent` authentication.
+4. Choose a permission level; keep `guarded` for a first connection.
+5. Return to the **Terminal** tab and click **Connect** on the server row.
 
-A saved password is shown only as configured status and is never displayed again. Return to the **Terminal** tab and click **Connect** on the server row.
+A saved password is shown only as configured status and is never displayed again.
 
-### 3. Handle risky commands
+### Risky commands
 
-Commands are checked when you press Enter. Each rule has one of three actions:
+Commands are checked when you press Enter:
 
-| Action | Result |
-| --- | --- |
-| `allow` | Run immediately |
-| `ask` | Pause and wait for your decision |
-| `deny` | Block without running |
-
-Permission levels:
-
-| Level | Best for |
+| Level | Behavior |
 | --- | --- |
 | `open` | Everyday use; hard-deny rules still apply |
-| `guarded` (default) | Normal servers; risky commands need approval |
-| `locked` | Sensitive servers; only explicitly allowed commands run directly |
+| `guarded` (default) | High-risk commands pause for approval |
+| `locked` | Only explicitly allowed commands run directly |
 
-For an `ask` command, choose **Run once**, **Always allow this command**, or **Deny**. A permanent allow rule applies only to the current server and exact command text.
+For an `ask` command, choose **Run once**, **Always allow this command**, or **Deny**. A permanent allow applies only to the current server and exact command text.
 
-### 4. Review status and history
-
-The terminal footer shows run, blocked, and allowed counts. Open **History** to review command and decision records. Switching to another DSH tab does not disconnect a background session.
-
-## Feature Screenshot
+## UI Preview
 
 ![Terminal and dangerous-command confirmation](assets/terminal-en.png)
 
-## AI Access
+The terminal footer shows run, blocked, and allowed counts. Open **History** to review command records. Switching to another DSH tab does not disconnect a background session.
+
+## AI Tools
 
 The plugin exposes two model tools:
 
