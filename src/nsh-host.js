@@ -130,6 +130,12 @@ return {
     // (无 answerer / 子代理上下文 / 动态加载无服务)时回退「面板挂起 + 一次性令牌」——
     // 令牌只有在面板真实裁决(allow/always/deny)后才可兑现,choice 参数不作授权依据。
     var askTokens = new Map()
+    // 模型建连确认的在途请求:同一服务器同时只允许一条确认/建连流程,
+    // 避免并发工具调用在用户回答前各自启动 SSH。
+    var modelConnectJobs = new Map()
+    // 模型授权按服务器保留在当前插件生命周期内;只有用户主动断开才清除。
+    // SSH 异常退出、网络断开和连接等待超时只会使当前会话失效,不会撤销这项授权。
+    var modelAuthorizedServers = new Set()
 
     // 宿主 realm 空白对象工厂:describe 返回的 CredentialInfo 是宿主 realm
     // 出身,delete 掉字段后就是干净的宿主 plain object。
@@ -334,6 +340,75 @@ return {
       return { uq: uq, diag: diag.join(',') }
     }
 
+    function modelConnectionResult(server, action, detail) {
+      var name = (server && (server.name || server.host)) || '目标服务器'
+      var suffix = detail ? ' ' + detail : ''
+      return {
+        ok: false,
+        blocked: true,
+        action: action,
+        needsConfirmation: true,
+        server: server && server.id,
+        output: '',
+        message: '未建立到「' + name + '」的远程连接。' + suffix
+      }
+    }
+
+    // 模型首次使用服务器,或用户主动断开后授权已被清除时,必须先取得真人确认。
+    // 确认服务不可用时 fail closed:不建立 SSH,也不把连接确认降级成模型可伪造的参数。
+    function requestModelConnectionApproval(server, cmd, exec) {
+      var rq = resolveUserQuestions(exec && exec.agent)
+      var uq = rq.uq
+      if (!uq || !exec || !exec.agent) {
+        return Promise.resolve({
+          approved: false,
+          result: modelConnectionResult(server, 'connect-confirmation-unavailable', '当前无法弹出用户确认卡,为安全起见未自动连接。[' + rq.diag + ']')
+        })
+      }
+      var question = {
+        id: 'netshell-connect',
+        header: '远程连接确认',
+        question: '模型请求连接「' + (server.name || server.host) + '」并执行远程命令,是否允许?' + NL + '$ ' + String(cmd || ''),
+        detail: '这是首次使用该服务器,或用户之前手动断开过该服务器,需要重新建立 SSH 连接。',
+        options: [
+          { label: '允许本次连接', description: '仅允许当前模型调用建立或重新建立 SSH 会话' },
+          { label: '拒绝', description: '不建立远程连接,本次命令不执行' }
+        ]
+      }
+      function ask(withAgent) {
+        var req = { questions: [question], signal: exec.signal }
+        if (withAgent) req.agent = exec.agent
+        return Promise.resolve().then(function () { return uq.ask(req) })
+      }
+      function parseAnswer(ans) {
+        var selected = ans && ans.answers && ans.answers[0] && ans.answers[0].selected
+        var pick = Array.isArray(selected) && selected.length > 0 ? selected[0] : ''
+        if (pick === '允许本次连接') return { approved: true }
+        return {
+          approved: false,
+          result: modelConnectionResult(server, 'connect-deny', '用户拒绝了本次连接确认。')
+        }
+      }
+      function failed(e, diag) {
+        var code = (e && e.code) || '?'
+        if (code === 'ASK_ABORTED') {
+          return { approved: false, result: modelConnectionResult(server, 'aborted', '用户中止了连接确认。') }
+        }
+        return {
+          approved: false,
+          result: modelConnectionResult(server, 'connect-confirmation-unavailable', '当前无法完成用户确认,为安全起见未自动连接。[' + diag + ' code=' + code + ']')
+        }
+      }
+      return ask(true).then(parseAnswer, function (e) {
+        // 与危险命令确认一致:带 agent 的作用域没有 answerer 时,
+        // 退一次全局 waterfall,但授权仍然只来自真人答案。
+        if (e && e.code === 'NO_PROVIDER') {
+          return ask(false).then(parseAnswer, function (e2) { return failed(e2, rq.diag + ',global') })
+        }
+        return failed(e, rq.diag)
+      })
+    }
+
     // 查找「面板已裁决、尚未被兑现」的工具令牌:(服务器, 命令) 精确匹配。
     function findDecided(serverId, cmd) {
       var found = null
@@ -534,7 +609,9 @@ function makeAskpass(s) {
     harness.handle('netshell.profiles.delete', function (args) {
       var id = args && args.id
       if (!id) return Promise.reject(new Error('缺少 id'))
+      modelAuthorizedServers.delete(id)
       sessions.forEach(function (s) {
+        if (s.server && s.server.id === id) s.modelApproved = false
         if (s.server && s.server.id === id && s.status !== 'closed') {
           try { void s.handle.terminate() } catch (e) {}
         }
@@ -583,7 +660,8 @@ function makeAskpass(s) {
           id: 'ns' + Date.now().toString(36) + (++nonce),
           server: server, status: 'connecting', outAll: '', outBase: 0, dropped: 0,
           events: [], evSeq: 0, line: '', hist: [], histIdx: undefined,
-          pending: null, tail: '', atPwPrompt: false, hint: null, closedReason: null, askpassPath: null
+          pending: null, tail: '', atPwPrompt: false, hint: null, closedReason: null, askpassPath: null,
+          modelApproved: false
         }
         var envJob = Promise.resolve(null)
         if (server.auth === 'password') {
@@ -686,6 +764,48 @@ function makeAskpass(s) {
       var existing = findLiveSession(server.id)
       if (existing) return Promise.resolve(existing)
       return spawnSession(server)
+    }
+
+    function findApprovedModelSession(serverId) {
+      var found = null
+      sessions.forEach(function (s) {
+        if (!found && s.server && s.server.id === serverId && s.modelApproved && s.status !== 'closed') found = s
+      })
+      return found
+    }
+
+    function ensureModelSession(server, cmd, exec) {
+      var existing = findApprovedModelSession(server.id)
+      if (existing) return Promise.resolve({ approved: true, session: existing })
+      var active = modelConnectJobs.get(server.id)
+
+      if (active) return active
+
+      var job = Promise.resolve().then(function () {
+        var current = findApprovedModelSession(server.id)
+        if (current) return { approved: true, session: current }
+        var approval = modelAuthorizedServers.has(server.id)
+          ? Promise.resolve({ approved: true })
+          : requestModelConnectionApproval(server, cmd, exec)
+        return approval.then(function (decision) {
+          if (!decision.approved) return decision
+          // 真人批准后,授权保留到插件生命周期结束或用户主动断开该服务器。
+          modelAuthorizedServers.add(server.id)
+          return ensureSession(server).then(function (session) {
+            session.modelApproved = true
+            return { approved: true, session: session }
+          }, function (e) {
+            return {
+              approved: false,
+              result: modelConnectionResult(server, 'connect-failed', 'SSH 会话建立失败:' + String((e && e.message) || e).slice(0, 180))
+            }
+          })
+        })
+      })
+      modelConnectJobs.set(server.id, job)
+      var clear = function () { if (modelConnectJobs.get(server.id) === job) modelConnectJobs.delete(server.id) }
+      job.then(clear, clear)
+      return job
     }
 
     function waitLive(s, timeoutMs, signal) {
@@ -842,11 +962,30 @@ function makeAskpass(s) {
       if (!cmd || typeof cmd !== 'string') return Promise.reject(new Error('缺少 command 参数'))
       return resolveServer(serverId).then(function (server) {
         if (!server) return Promise.reject(new Error('找不到服务器档案: ' + serverId))
-        return ensureSession(server).then(function (disp) {
+        // 硬拒绝命令无需建立 SSH,避免连上服务器后才发现命令本来就不允许。
+        var initial = evaluateFor(server, cmd)
+        if (initial.action === 'deny') {
+          var initialRule = initial.rule && (initial.rule.note || initial.rule.pattern)
+          return {
+            ok: false, blocked: true, action: 'deny', rule: initialRule || '内置规则', output: '', command: cmd
+          }
+        }
+        return ensureModelSession(server, cmd, exec).then(function (connection) {
+          if (!connection.approved) return connection.result
+          var disp = connection.session
           disp.agentBusy = true
           var toolBody = function () {
           return waitLive(disp, 20000, exec && exec.signal).then(function (ready) {
-            if (!ready) return { ok: false, blocked: false, error: '会话未就绪或已断开:' + (disp.closedReason || disp.hint || 'unknown'), output: '' }
+            if (!ready) {
+               // 连接等待超时或被取消时,销毁尚未就绪的会话,但保留服务器级模型授权;
+               // 下一次模型调用可以自动重连,不复用这条半连接状态。
+               if (disp.status === 'connecting') {
+                 disp.hint = '连接等待超时或已取消'
+                 try { void disp.handle.terminate() } catch (e) {}
+                 onExit(disp, { exitCode: null, signal: 'timeout' })
+               }
+               return { ok: false, blocked: false, error: '会话未就绪或已断开:' + (disp.closedReason || disp.hint || 'unknown'), output: '' }
+             }
             var v = evaluateFor(server, cmd)
             var ruleNote = v.rule && (v.rule.note || v.rule.pattern)
             function appendOut(r, addCmd) {
@@ -1049,7 +1188,16 @@ harness.handle('netshell.input', function (args) {
       if (s.handle) { try { void s.handle.terminate() } catch (e) {} }
       // 退出即移除:之前只 terminate 不移除,会话残留在 sessions Map,
       // 客户端 discoverSessions 下一轮又会把它加回来,导致「点了删除却删不掉」。
-      sessions.delete(args && args.id)
+      var serverId = s.server && s.server.id
+      if (serverId) {
+         // 只有用户主动断开才撤销服务器级模型授权;
+         // 网络/SSH 退出走 onExit,不会触碰这个集合。
+         modelAuthorizedServers.delete(serverId)
+         sessions.forEach(function (other) {
+           if (other.server && other.server.id === serverId) other.modelApproved = false
+         })
+       }
+       sessions.delete(args && args.id)
       return Promise.resolve({ ok: true })
     })
 
@@ -1080,7 +1228,7 @@ harness.handle('netshell.input', function (args) {
 
     var runTool = harness.defineTool({
       name: 'netshell_run',
-      description: '在指定的远程服务器(NetShell 终端)上执行一条 shell 命令并返回输出。命令通过真实 SSH 终端执行,支持权限控制:命中 deny 规则(如 rm -rf /)直接拦截;命中 ask 规则(如 rm -rf *)时,本工具会直接在对话窗口弹出原生确认卡并原地等待用户选择(执行一次 / 永久放行该命令 / 拒绝),无需你再调用 ask_user_question;仅当当前环境无法弹卡(子代理上下文或无界面)时,才返回 blocked + confirmToken 并在终端面板挂起,此时请提醒用户到「远程终端」面板裁决,再携 confirmToken 重跑本工具。用 netshell_servers 查询服务器 id 作为 server 参数。',
+      description: '仅当用户明确要求在指定远程服务器上执行命令时使用;本机问题优先使用本地工具,不要根据“网络问题”或“服务异常”等模糊描述自行选择远程服务器。在指定服务器(NetShell 终端)上执行一条 shell 命令并返回输出。模型首次使用服务器或用户主动断开后,插件会先要求用户确认远程连接,确认前不会建立 SSH。命令通过真实 SSH 终端执行,支持权限控制:命中 deny 规则(如 rm -rf /)直接拦截;命中 ask 规则(如 rm -rf *)时,本工具会直接在对话窗口弹出原生确认卡并原地等待用户选择(执行一次 / 永久放行该命令 / 拒绝),无需你再调用 ask_user_question;仅当当前环境无法弹卡(子代理上下文或无界面)时,连接确认和危险命令确认都会安全拒绝,不会自动建连。用 netshell_servers 查询服务器 id 作为 server 参数。',
       parameters: {
         server: { type: 'string', description: '服务器 id,来自 netshell_servers 返回的 id 字段', required: true },
         command: { type: 'string', description: '要在服务器上执行的 shell 命令', required: true },
@@ -1110,6 +1258,8 @@ harness.handle('netshell.input', function (args) {
 ctx.effect(function () {
       return function () {
         askTokens.clear()
+        modelConnectJobs.clear()
+        modelAuthorizedServers.clear()
         sessions.forEach(function (s) {
           if (s.handle) { try { void s.handle.terminate() } catch (e) {} }
         })

@@ -38,6 +38,8 @@ function sshOut(text) {
 async function* termOut() { yield 'deploy@dev-box:~$ ' }
 const ptyWrites = []
 const sweeps = [] // TOOL_ASK_TTL 级 timer 的手动触发句柄
+let spawnTerminalCalls = 0
+const terminalDoneResolvers = []
 const timer = {
   timeout: (ms) => ms >= 600000
     ? new Promise((res) => { sweeps.push(res) })
@@ -46,7 +48,13 @@ const timer = {
 }
 const subprocess = {
   resolveExecutable: async () => '/usr/bin/ssh',
-  spawnTerminal: async () => ({ pid: 123, output: termOut(), write: (d) => { ptyWrites.push(d) }, terminate() {}, done: new Promise(() => {}) }),
+  spawnTerminal: async () => {
+    spawnTerminalCalls += 1
+    let finish
+    const done = new Promise((resolve) => { finish = resolve })
+    terminalDoneResolvers.push(finish)
+    return { pid: 123 + spawnTerminalCalls, output: termOut(), write: (d) => { ptyWrites.push(d) }, terminate() {}, done }
+  },
   spawn: () => sshOut('ok-output'),
 }
 
@@ -55,15 +63,30 @@ const AGENT = { id: 'a1', name: 'root' }
 const fakeUQ = {
   mode: 'answer', // 'answer' | 'no-provider' | 'aborted'
   answer: ['执行一次'],
+  connectionAnswer: '允许本次连接',
+  holdConnection: false,
+  releaseConnection: null,
   custom: undefined,
   lastRequest: null,
+  requests: [],
   askCalls: 0,
   ask(request) {
     this.lastRequest = request
+    this.requests.push(request)
     this.askCalls += 1
     if (this.mode === 'no-provider') return Promise.reject({ code: 'NO_PROVIDER', message: 'no answerer' })
     if (this.mode === 'aborted') return Promise.reject({ code: 'ASK_ABORTED', message: 'aborted' })
-    const sel = Array.isArray(this.answer) ? this.answer : []
+    const isConnection = request.questions[0].id === 'netshell-connect'
+    const selected = isConnection ? this.connectionAnswer : this.answer
+    if (isConnection && this.holdConnection) {
+      return new Promise((resolve) => {
+        this.releaseConnection = (pick = this.connectionAnswer) => {
+          this.holdConnection = false
+          resolve({ answers: [{ id: request.questions[0].id, selected: [pick] }] })
+        }
+      })
+    }
+    const sel = Array.isArray(selected) ? selected : [selected]
     return Promise.resolve({ answers: [{ id: request.questions[0].id, selected: sel, ...(this.custom ? { custom: this.custom } : {}) }] })
   },
 }
@@ -90,11 +113,29 @@ const run = (args) => registeredTools.netshell_run.execute({ server: 'srv1', ...
 const CMD = 'shutdown -h now'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-// ── A1. 主路径:ask 命中 → 直调 userQuestions.ask,参数形态正确 ──
+// ── A0. 首次模型建连必须先确认,确认前不得启动 SSH ──
 fakeUQ.mode = 'answer'
 fakeUQ.answer = ['执行一次']
-let r = await run({ command: CMD })
-ok(fakeUQ.askCalls === 1, 'A1: ask 命中 → 插件直调 userQuestions.ask')
+fakeUQ.connectionAnswer = '允许本次连接'
+fakeUQ.holdConnection = true
+const beforeFirstConnect = spawnTerminalCalls
+const firstRun = run({ command: 'echo first' })
+await sleep(5)
+const concurrentRun = run({ command: 'echo parallel' })
+await sleep(5)
+ok(fakeUQ.requests.some((x) => x.questions[0].id === 'netshell-connect'), 'A0: 首次模型建连弹出连接确认卡')
+ok(spawnTerminalCalls === beforeFirstConnect, 'A0: 用户确认前没有启动 SSH')
+ok(fakeUQ.askCalls === 1, 'A0: 并发模型调用共享同一条连接确认')
+ok(fakeUQ.requests.at(-1).agent === AGENT, 'A0: 连接确认原样透传 live agent')
+fakeUQ.releaseConnection('允许本次连接')
+let r = await firstRun
+const concurrentResult = await concurrentRun
+ok(r.ok === true && String(r.output).includes('ok-output'), 'A0: 允许连接后才执行远程命令')
+ok(concurrentResult.ok === true && String(concurrentResult.output).includes('ok-output'), 'A0: 并发调用复用已确认会话')
+
+// ── A1. 主路径:ask 命中 → 直调 userQuestions.ask,参数形态正确 ──
+r = await run({ command: CMD })
+ok(fakeUQ.askCalls === 2, 'A1: 首次连接确认后,危险命令再次弹出确认')
 const req = fakeUQ.lastRequest
 ok(req && req.agent === AGENT, 'A1: agent 为 exec.agent 原样透传(全等)')
 ok(req && req.questions.length === 1 && req.questions[0].question.includes(CMD), 'A1: 问题文本包含命令')
@@ -214,8 +255,38 @@ host2.apply({
   effect(fn) { fn(); return () => {} },
   get: () => undefined,
 }, { enabled: true, routePath: '/netshell/rpc2' })
+const noUqSpawnBefore = spawnTerminalCalls
 r = await registered2.netshell_run.execute({ server: 'srv1', command: CMD }, { agent: AGENT, signal: undefined })
-ok(r.ok === false && r.blocked === true && typeof r.confirmToken === 'string', 'C: 无 userQuestions 服务 → 面板回退 + 令牌')
+ok(r.ok === false && r.blocked === true && r.action === 'connect-confirmation-unavailable' && !r.confirmToken, 'C: 无 userQuestions 服务 → 拒绝自动建连')
+ok(spawnTerminalCalls === noUqSpawnBefore, 'C: 无法确认时没有启动 SSH')
+
+// ── C1. 会话被用户断开后,下一次模型调用必须重新确认 ──
+fakeUQ.mode = 'answer'
+fakeUQ.answer = ['执行一次']
+fakeUQ.connectionAnswer = '允许本次连接'
+const liveBeforeUserDisconnect = (await sessionsList()).find((s) => s.serverName === 'dev-box' && s.status === 'live')
+ok(!!liveBeforeUserDisconnect, 'C1: 断开前存在存活远程会话')
+await rpc('netshell.disconnect', { id: liveBeforeUserDisconnect.id })
+const userReconnectSpawnBefore = spawnTerminalCalls
+fakeUQ.holdConnection = true
+const userReconnect = run({ command: 'echo after-user-disconnect' })
+await sleep(5)
+ok(spawnTerminalCalls === userReconnectSpawnBefore, 'C1: 用户断开后确认前不自动重连')
+ok(fakeUQ.requests.at(-1).questions[0].id === 'netshell-connect', 'C1: 用户断开后再次弹出连接确认')
+fakeUQ.releaseConnection('允许本次连接')
+r = await userReconnect
+ok(r.ok === true && String(r.output).includes('ok-output'), 'C1: 重新确认后恢复执行')
+
+// ── C2. SSH 会话异常退出后,沿用服务器授权自动重连 ──
+const doneAfterUserReconnect = terminalDoneResolvers[terminalDoneResolvers.length - 1]
+doneAfterUserReconnect({ exitCode: 255, signal: null })
+await sleep(5)
+const networkReconnectSpawnBefore = spawnTerminalCalls
+const askCallsBeforeNetworkReconnect = fakeUQ.askCalls
+r = await run({ command: 'echo after-network-drop' })
+ok(spawnTerminalCalls === networkReconnectSpawnBefore + 1, 'C2: SSH 断开后自动建立新的 SSH 会话')
+ok(fakeUQ.askCalls === askCallsBeforeNetworkReconnect, 'C2: SSH 断开后沿用已有模型授权')
+ok(r.ok === true && String(r.output).includes('ok-output'), 'C2: 沿用授权后恢复执行')
 
 // ── D. netshell.input 多字符防绕过 ──
 const conn = await rpc('netshell.connect', { serverId: 'srv1' })
