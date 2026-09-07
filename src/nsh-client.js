@@ -98,7 +98,7 @@ var CSS = ''
   + '.nsh-term{flex:1;min-height:0;overflow:auto;padding:10px 12px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre;outline:none;cursor:text;background:var(--nsh-term-bg);color:var(--nsh-term-fg)}'
   + '.nsh-term-dark{--nsh-term-bg:#0d1117;--nsh-term-fg:#c9d1d9;--nsh-cursor:#3fb950}'
   + '.nsh-term-light{--nsh-term-bg:#ffffff;--nsh-term-fg:#24292f;--nsh-cursor:#116329}'
-  + '.nsh-cursor{color:var(--nsh-cursor);animation:nsh-blink 1.1s step-end infinite}'
+  + '.nsh-cursor{display:inline-block;box-sizing:border-box;width:1ch;height:1.15em;overflow:hidden;vertical-align:-0.15em;color:transparent;background:var(--nsh-cursor);animation:nsh-blink 1.1s step-end infinite}'
   + '@keyframes nsh-blink{0%,49%{opacity:1}50%,100%{opacity:0}}'
   + '@media (prefers-reduced-motion: reduce){.nsh-cursor{animation:none}}'
   + '.nsh-line{min-height:20px}'
@@ -264,9 +264,12 @@ function lineSpans(raw) {
   var spans = []
   var buf = ''
   var curS = null
-  for (var m = 0; m < cells.length; m++) {
-    var cell = cells[m]
-    if (!cell) { if (buf) { spans.push({ t: buf, s: curS }); buf = ''; curS = null } continue }
+  var blankS = { fg: null, bg: null, bold: false, dim: false, under: false, it: false, strike: false }
+  // CSI 光标移动可以在已有内容后留下未写入的列。空洞必须保留为真实空格,
+  // 否则渲染器只按文本长度计算,光标会被错误压到行尾。
+  var end = Math.max(cells.length, col)
+  for (var m = 0; m < end; m++) {
+    var cell = cells[m] || { t: ' ', s: blankS }
     if (curS && styleEq(curS, cell.s)) { buf += cell.t }
     else { if (buf) spans.push({ t: buf, s: curS }); buf = cell.t; curS = cell.s }
   }
@@ -279,7 +282,8 @@ function newScreen(serverName) {
   return {
     serverName: serverName, lines: [], cur: '', lastCursor: 0, lastSeq: 0,
     events: [], status: 'connecting', pending: null, closedReason: null,
-    hint: null, lossy: false, dropped: 0, showHist: false, nExec: 0, nDeny: 0, nAsk: 0
+    hint: null, lossy: false, dropped: 0, showHist: false, nExec: 0, nDeny: 0, nAsk: 0,
+    pollInFlight: false, pollAgain: false, pollPromise: null
   }
 }
 
@@ -463,7 +467,12 @@ function refreshServers() {
 function pollOne(id) {
   var sc = screens.get(id)
   if (!sc) return Promise.resolve()
-  return host.call('netshell.poll', { id: id }).then(function (r) {
+  if (sc.pollInFlight) {
+    sc.pollAgain = true
+    return sc.pollPromise || Promise.resolve()
+  }
+  sc.pollInFlight = true
+  var request = host.call('netshell.poll', { id: id }).then(function (r) {
     if (r && r.gone) {
       // 宿主已无此会话(断开/移除),清理本地并停止轮询;一并拉黑,避免在途列表加回。
       removedIds.add(id)
@@ -495,13 +504,23 @@ function pollOne(id) {
       }
     }
     store.set({ tick: store.st.tick + 1 })
-  }).catch(function () {})
+  }).catch(function () {}).then(function () {
+    sc.pollInFlight = false
+    sc.pollPromise = null
+    if (sc.pollAgain && screens.has(id)) {
+      sc.pollAgain = false
+      return pollOne(id)
+    }
+    sc.pollAgain = false
+  })
+  sc.pollPromise = request
+  return request
 }
 
 function discoverSessions() {
   return host.call('netshell.sessions.list', {}).then(function (r) {
     var list = (r && r.sessions) || []
-    // 先清理宿主已不存在的会话(断开/移除):避免残留 id 被每 150ms 轮询,
+    // 先清理宿主已不存在的会话(断开/移除):避免残留 id 被每 80ms 轮询,
     // 也避免 pollOne 对已消失会话报 handler 失败。
     var present = {}
     for (var p = 0; p < list.length; p++) if (list[p] && list[p].id) present[list[p].id] = true
@@ -632,7 +651,9 @@ function TermView(props) {
     var data = keyToData(e)
     if (data !== null && data !== undefined) {
       e.preventDefault()
-      host.call('netshell.input', { id: id, data: data }).catch(function () {})
+      host.call('netshell.input', { id: id, data: data })
+        .then(function () { return pollOne(id) })
+        .catch(function () {})
     }
   }
   var view = sc.lines.slice(-400)
@@ -654,18 +675,21 @@ function TermView(props) {
   var placed = false
   for (var k = 0; k < liveSpans.length; k++) {
     var sp = liveSpans[k]
-    if (!placed && used + sp.t.length >= liveCol) {
+    if (!placed && liveCol >= used && liveCol < used + sp.t.length) {
       var off = liveCol - used
       if (off > 0) liveEls.push(h('span', { key: 'p' + k, style: spanStyle(sp) }, sp.t.slice(0, off)))
-      liveEls.push(h('span', { key: 'cur', className: 'nsh-cursor' }, '▌'))
-      if (off < sp.t.length) liveEls.push(h('span', { key: 'q' + k, style: spanStyle(sp) }, sp.t.slice(off)))
+      var curStyle = spanStyle(sp)
+      curStyle.backgroundColor = 'var(--nsh-cursor)'
+      curStyle.color = 'var(--nsh-term-bg)'
+      liveEls.push(h('span', { key: 'cur', className: 'nsh-cursor', style: curStyle }, sp.t.charAt(off)))
+      if (off + 1 < sp.t.length) liveEls.push(h('span', { key: 'q' + k, style: spanStyle(sp) }, sp.t.slice(off + 1)))
       placed = true
     } else {
       liveEls.push(h('span', { key: k, style: spanStyle(sp) }, sp.t))
     }
     used += sp.t.length
   }
-  if (!placed) liveEls.push(h('span', { key: 'curEnd', className: 'nsh-cursor' }, '▌'))
+  if (!placed) liveEls.push(h('span', { key: 'curEnd', className: 'nsh-cursor' }, ' '))
   children.push(h('div', { key: 'live', className: 'nsh-line' }, liveEls))
   return h('div', { className: 'nsh-term ' + th.cls, tabIndex: 0, ref: setNode, onKeyDown: onKeyDown }, children)
 }
@@ -1127,7 +1151,7 @@ return {
         void discoverSessions()
         var id = store.st.activeId
         if (id) void pollOne(id)
-      }, 150)
+      }, 80)
     })
     void refreshServers()
     slots.inject('conversation.view', function () {

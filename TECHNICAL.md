@@ -97,7 +97,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 注意:
 
 - `netshell.poll` 目前是全量快照:`output` 为缓冲全文,`nextCursor` 恒为 `0`、`lossy` 恒为 `false`——增量游标是**预留字段**,未实现;
-- Client 以 **150ms** 固定间隔轮询:`discoverSessions`(发现外部 / 模型开的会话与 pending,必要时自动弹出面板)+ `pollOne(activeId)`(仅当前会话)。
+- Client 以 **80ms** 固定间隔轮询:`discoverSessions`(发现外部 / 模型开的会话与 pending,必要时自动弹出面板)+ `pollOne(activeId)`(仅当前会话);同一会话的 poll 请求串行化,输入 RPC 完成后额外触发一次即时 poll。
 
 ## 6. Guard 引擎(Host 侧)
 
@@ -160,14 +160,16 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 
 - **`netshell_servers`**:无参数,读 `PKEY` 返回 `{ servers: [{ id, name, host, port, user, auth, level }] }`;
 - **`netshell_run`**:参数 `server`(必填)、`command`(必填)、`timeoutMs`(默认 30000);`confirmToken` 仅回退路径使用,`choice` 已废弃(授权只认真人裁决,参数被忽略)。执行流(`toolRunExecute`):
-  1. `resolveServer` → `ensureSession`(**复用或新建交互 PTY 会话**,与面板共享,waitLive 最长 20s);
-  2. Guard 评估:`deny` → 直接返回 blocked;`allow` → `runRemote`(`ssh -T … <cmd>` 独立一次性执行,同样使用私有 known_hosts;stdout 上限 200K/spill 400K);
-  3. `ask` → 依次尝试四条路径:
+  1. Guard 先评估硬拒绝规则:`deny` → 直接返回 blocked,不建立 SSH;其他命令进入模型连接确认流程;
+  2. 当前模型会话首次使用服务器,或用户主动断开后该会话的服务器授权已被清除时,经 `userQuestions.ask` 请求真人确认。授权在当前插件生命周期内按 Agent + 服务器保留;不同 Agent 即使复用同一个共享 SSH 会话也必须分别确认。网络/SSH 异常退出或连接等待超时只会使当前会话失效,已授权 Agent 下一次调用沿用授权自动重连。确认服务不可用时 fail closed,不自动连接;同一 Agent 的并发调用共享确认任务;
+  3. 确认通过后 `resolveServer` → `ensureSession`(**复用或新建交互 PTY 会话**,与面板共享,waitLive 最长 20s);
+  4. Guard 评估:`deny` → 直接返回 blocked;`allow` → `runRemote`(`ssh -T … <cmd>` 独立一次性执行,同样使用私有 known_hosts;stdout 上限 200K/spill 400K);
+  5. `ask` → 依次尝试四条路径:
      - **路径一(令牌兑现)**:携 `confirmToken` 重跑时,校验一次性、服务器+命令绑定、`TOOL_ASK_TTL`(10 分钟)时效;面板已裁决 → 兑现执行,未裁决 → 返回 blocked 且**不消耗令牌**(模型可提醒用户后再试);
      - **路径二(漏带令牌兑现)**:无令牌但存在 (服务器, 命令) 精确匹配且面板已裁决的记录 → 直接兑现;
      - **路径三(首选 · 原生弹卡)**:直调宿主 `ctx.get('userQuestions').ask({ questions, agent: exec.agent, signal: exec.signal })`——与内置 `ask_user_question` 完全同一形态,确认卡原生弹在**对话窗口**,工具原地等待真人作答;答案由宿主服务返回,选「执行一次」→ `runRemote`、「永久放行该命令」→ 写规则表后 `runRemote`、其余(拒绝/自定义文本/空答案)一律按拒绝。**agent 必须原样透传 `exec.agent`(live Agent 对象)**:服务端做 `agents.get(agent.id) === agent` 全等校验,0.5.x 用 id 重建对象导致 `CALLER_NOT_LIVE` fail closed 是当年误诊为"宿主平面无法弹卡"的根因;`ASK_ABORTED` → aborted,`NO_PROVIDER` / `DELEGATED_CALLER` 等 → 路径四;
      - **路径四(面板回退)**:共享会话置 `pending(from: 'tool', token)`(面板横幅可见)+ 签发一次性令牌返回 blocked;同一会话同时只允许一条挂起;`TOOL_ASK_TTL` 后 sweep 自动撤销挂起并作废令牌;
-  4. 结果(stdout/stderr/exitCode)与 `$ <cmd>` 一起**回写共享会话的 `outAll` 与事件流**,面板全程可见模型做了什么。
+  6. 结果(stdout/stderr/exitCode)与 `$ <cmd>` 一起**回写共享会话的 `outAll` 与事件流**,面板全程可见模型做了什么。
 
   授权凭证只会来自真人操作(确认卡答案 / 面板 `netshell.decide` 点击),模型的 `choice` 参数不参与授权——这是机制性绑定,不依赖模型自觉。
 
