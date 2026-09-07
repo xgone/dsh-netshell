@@ -60,6 +60,7 @@ const subprocess = {
 
 // userQuestions 桩:验证插件的调用形态并按 mode 决定回答/拒绝
 const AGENT = { id: 'a1', name: 'root' }
+const AGENT2 = { id: 'a2', name: 'second-session' }
 const fakeUQ = {
   mode: 'answer', // 'answer' | 'no-provider' | 'aborted'
   answer: ['执行一次'],
@@ -109,7 +110,8 @@ const rpc = async (method, args) => {
   return res.json()
 }
 const sessionsList = async () => (await rpc('netshell.sessions.list', {})).sessions
-const run = (args) => registeredTools.netshell_run.execute({ server: 'srv1', ...args }, { agent: AGENT, signal: undefined })
+const runAs = (agent, args) => registeredTools.netshell_run.execute({ server: 'srv1', ...args }, { agent, signal: undefined })
+const run = (args) => runAs(AGENT, args)
 const CMD = 'shutdown -h now'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -143,6 +145,16 @@ ok(req && req.questions[0].options.length === 3
   && req.questions[0].options.map((o) => o.label).join('|') === '执行一次|永久放行该命令|拒绝', 'A1: 三个选项标签正确')
 ok(r.ok === true && r.blocked === false && String(r.output).includes('ok-output'), 'A1: 「执行一次」→ 执行并回传输出')
 ok(r.action === 'allow' && !('confirmToken' in r), 'A1: 主路径不签发令牌')
+
+// ── A1b. 第二个模型会话复用 SSH,但必须独立确认 ──
+const secondAgentAskBefore = fakeUQ.askCalls
+const secondAgentSpawnBefore = spawnTerminalCalls
+r = await runAs(AGENT2, { command: 'echo second-agent' })
+ok(fakeUQ.askCalls === secondAgentAskBefore + 1, 'A1b: 第二个 Agent 首次使用同一服务器仍需确认')
+ok(fakeUQ.lastRequest && fakeUQ.lastRequest.questions[0].id === 'netshell-connect', 'A1b: 第二个 Agent 弹出连接确认')
+ok(fakeUQ.lastRequest && fakeUQ.lastRequest.agent === AGENT2, 'A1b: 确认卡绑定第二个 live Agent')
+ok(spawnTerminalCalls === secondAgentSpawnBefore, 'A1b: 第二个 Agent 复用共享 SSH 会话')
+ok(r.ok === true && String(r.output).includes('ok-output'), 'A1b: 第二个 Agent 确认后执行成功')
 
 // ── A2. 永久放行 ──
 fakeUQ.answer = ['永久放行该命令']

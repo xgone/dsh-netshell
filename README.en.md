@@ -93,7 +93,7 @@ The plugin exposes two model tools:
 
 AI commands and human input use the same Guard. `deny` commands never run, and `ask` commands require a decision from you in the DSH confirmation UI or terminal panel. The AI cannot see passwords or forge approval results.
 
-On the first model use of a server, or after the user manually disconnects that server, `netshell_run` asks for remote-connection approval before starting SSH. Approval is retained per server for the current plugin lifetime; a network failure, SSH exit, or connection timeout only triggers automatic reconnection and does not ask again. A manually opened GUI session does not replace model approval. If the confirmation service is unavailable, the plugin fails closed and does not connect automatically.
+On the first use of a server by a model session, or after the user manually disconnects that server, `netshell_run` asks for remote-connection approval before starting SSH. Approval is retained per model session and server for the current plugin lifetime; different model sessions must approve independently even when they reuse the same SSH session. A network failure, SSH exit, or connection timeout only triggers reconnection for the already-approved model session. A manually opened GUI session does not replace model approval. If the confirmation service is unavailable, the plugin fails closed and does not connect automatically.
 
 ## Security Boundary
 

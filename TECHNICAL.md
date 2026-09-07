@@ -161,7 +161,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 - **`netshell_servers`**:无参数,读 `PKEY` 返回 `{ servers: [{ id, name, host, port, user, auth, level }] }`;
 - **`netshell_run`**:参数 `server`(必填)、`command`(必填)、`timeoutMs`(默认 30000);`confirmToken` 仅回退路径使用,`choice` 已废弃(授权只认真人裁决,参数被忽略)。执行流(`toolRunExecute`):
   1. Guard 先评估硬拒绝规则:`deny` → 直接返回 blocked,不建立 SSH;其他命令进入模型连接确认流程;
-  2. 模型首次使用服务器,或用户主动断开后服务器授权已被清除时,经 `userQuestions.ask` 请求真人确认。授权在当前插件生命周期内按服务器保留;网络/SSH 异常退出或连接等待超时只会使当前会话失效,下一次调用沿用授权自动重连。确认服务不可用时 fail closed,不自动连接。并发调用共享同一条确认/建连任务;
+  2. 当前模型会话首次使用服务器,或用户主动断开后该会话的服务器授权已被清除时,经 `userQuestions.ask` 请求真人确认。授权在当前插件生命周期内按 Agent + 服务器保留;不同 Agent 即使复用同一个共享 SSH 会话也必须分别确认。网络/SSH 异常退出或连接等待超时只会使当前会话失效,已授权 Agent 下一次调用沿用授权自动重连。确认服务不可用时 fail closed,不自动连接;同一 Agent 的并发调用共享确认任务;
   3. 确认通过后 `resolveServer` → `ensureSession`(**复用或新建交互 PTY 会话**,与面板共享,waitLive 最长 20s);
   4. Guard 评估:`deny` → 直接返回 blocked;`allow` → `runRemote`(`ssh -T … <cmd>` 独立一次性执行,同样使用私有 known_hosts;stdout 上限 200K/spill 400K);
   5. `ask` → 依次尝试四条路径:
