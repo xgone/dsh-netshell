@@ -1,6 +1,6 @@
 {
   "name": "@xgone/dsh-netshell",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Remote SSH terminal for the DeepSeek Harness web UI: main-area terminal tab, dangerous-command guard (open/guarded/locked), confirmation workflow, and model tools (netshell_servers / netshell_run). Passwords live in the DSH encrypted credential store and never pass through AI sessions.",
   "type": "module",
   "main": "lib/index.js",
