@@ -97,7 +97,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 注意:
 
 - `netshell.poll` 目前是全量快照:`output` 为缓冲全文,`nextCursor` 恒为 `0`、`lossy` 恒为 `false`——增量游标是**预留字段**,未实现;
-- Client 以 **150ms** 固定间隔轮询:`discoverSessions`(发现外部 / 模型开的会话与 pending,必要时自动弹出面板)+ `pollOne(activeId)`(仅当前会话)。
+- Client 以 **80ms** 固定间隔轮询:`discoverSessions`(发现外部 / 模型开的会话与 pending,必要时自动弹出面板)+ `pollOne(activeId)`(仅当前会话);同一会话的 poll 请求串行化,输入 RPC 完成后额外触发一次即时 poll。
 
 ## 6. Guard 引擎(Host 侧)
 

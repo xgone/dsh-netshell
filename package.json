@@ -25,7 +25,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "node --check lib/index.js && node --check lib/client.js",
-    "test": "pnpm build && pnpm check && node test/smoke.mjs && node test/ask-flow.mjs",
+    "test": "pnpm build && pnpm check && node test/smoke.mjs && node test/ask-flow.mjs && node test/terminal-render.mjs",
     "prepublishOnly": "pnpm test"
   },
   "license": "MIT",
