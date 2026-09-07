@@ -675,18 +675,21 @@ function TermView(props) {
   var placed = false
   for (var k = 0; k < liveSpans.length; k++) {
     var sp = liveSpans[k]
-    if (!placed && used + sp.t.length >= liveCol) {
+    if (!placed && liveCol >= used && liveCol < used + sp.t.length) {
       var off = liveCol - used
       if (off > 0) liveEls.push(h('span', { key: 'p' + k, style: spanStyle(sp) }, sp.t.slice(0, off)))
-      liveEls.push(h('span', { key: 'cur', className: 'nsh-cursor' }, '▌'))
-      if (off < sp.t.length) liveEls.push(h('span', { key: 'q' + k, style: spanStyle(sp) }, sp.t.slice(off)))
+      var curStyle = spanStyle(sp)
+      curStyle.backgroundColor = 'var(--nsh-cursor)'
+      curStyle.color = 'var(--nsh-term-bg)'
+      liveEls.push(h('span', { key: 'cur', className: 'nsh-cursor', style: curStyle }, sp.t.charAt(off)))
+      if (off + 1 < sp.t.length) liveEls.push(h('span', { key: 'q' + k, style: spanStyle(sp) }, sp.t.slice(off + 1)))
       placed = true
     } else {
       liveEls.push(h('span', { key: k, style: spanStyle(sp) }, sp.t))
     }
     used += sp.t.length
   }
-  if (!placed) liveEls.push(h('span', { key: 'curEnd', className: 'nsh-cursor' }, '▌'))
+  if (!placed) liveEls.push(h('span', { key: 'curEnd', className: 'nsh-cursor' }, ' '))
   children.push(h('div', { key: 'live', className: 'nsh-line' }, liveEls))
   return h('div', { className: 'nsh-term ' + th.cls, tabIndex: 0, ref: setNode, onKeyDown: onKeyDown }, children)
 }

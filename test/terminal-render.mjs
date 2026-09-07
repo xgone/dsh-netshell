@@ -15,6 +15,7 @@ const ok = (condition, label) => {
 }
 
 ok(source.includes(".nsh-cursor{display:inline-block") && source.includes("background:var(--nsh-cursor)"), 'cursor uses a full-cell block style')
+ok(source.includes("curStyle.backgroundColor = 'var(--nsh-cursor)'"), 'cursor highlights the character cell instead of inserting a glyph')
 
 let parsed = renderFns.lineSpans('abc\u001b[3C')
 ok(parsed.col === 6, 'cursor column advances across CSI C')
