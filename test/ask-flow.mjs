@@ -35,7 +35,22 @@ function sshOut(text) {
     collected: { stdout: { readFrom: () => ({ text }) }, stderr: { readFrom: () => ({ text: '' }) } },
   }
 }
-async function* termOut() { yield 'deploy@dev-box:~$ ' }
+let outputIteratorCalls = 0
+function termOut() {
+  let emitted = false
+  return {
+    [Symbol.asyncIterator]() {
+      outputIteratorCalls += 1
+      return {
+        next: async () => {
+          if (emitted) return { done: true, value: undefined }
+          emitted = true
+          return { done: false, value: 'deploy@dev-box:~$ ' }
+        }
+      }
+    }
+  }
+}
 const ptyWrites = []
 const sweeps = [] // TOOL_ASK_TTL 级 timer 的手动触发句柄
 let spawnTerminalCalls = 0
@@ -134,6 +149,7 @@ let r = await firstRun
 const concurrentResult = await concurrentRun
 ok(r.ok === true && String(r.output).includes('ok-output'), 'A0: 允许连接后才执行远程命令')
 ok(concurrentResult.ok === true && String(concurrentResult.output).includes('ok-output'), 'A0: 并发调用复用已确认会话')
+ok(outputIteratorCalls === spawnTerminalCalls, 'A0: 每个终端只创建一个输出迭代器')
 
 // ── A1. 主路径:ask 命中 → 直调 userQuestions.ask,参数形态正确 ──
 r = await run({ command: CMD })

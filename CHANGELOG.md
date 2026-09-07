@@ -24,6 +24,7 @@
 
 ### 修复
 
+- **终端输出 PassThrough 监听器泄漏**：输出消费改为每个会话只创建一个 async iterator，避免每个输出 chunk 重复注册 `end` / `finish` / `error` / `close` 监听器，修复启动或长时间运行时的 `MaxListenersExceededWarning`。
 - **终端左右移动光标卡顿与右侧空白**：ANSI 光标移动产生的空白列现在会保留并参与渲染，避免光标被压到行尾；输入完成后立即刷新当前会话，并串行化 poll 快照，减少方向键延迟和旧快照覆盖。
 - **AI 危险命令确认卡在部分挂载形态退化为面板兜底(原生弹卡回归修复)**:`netshell_run` 命中 `ask` 规则时的首选路径是直调宿主 `userQuestions.ask` 在对话窗口弹原生确认卡,但 `userQuestions` 服务的可解析性依赖插件 ctx 所处作用域——动态加载宿主半区挂在根组合 `cordis-dynamic` 组下,自身 ctx 取不到该服务时旧代码直接落到面板兜底。现 `resolveUserQuestions(agent)` 依次尝试:自身 ctx → `exec.agent.ctx` → `agents.get(agent.id).ctx` 桥接;带 `agent` 的作用域瀑布若返回 `NO_PROVIDER`(回答者未注册在该作用域),自动退一次**不带 agent 的全局瀑布**重试(真人点卡的机制性授权不变);仍失败才回退面板。所有回退路径的失败码与解析诊断随工具 `message` 带出并打日志(`[未弹原生卡:…]`),便于定位。
 - **服务器规则编辑区横向溢出(超出设置面板)**:动作下拉同时设了 `flex: none`(不可收缩)与内联 `maxWidth: 'none'`(移除了 `select.nsh-in` 的 240px 上限),而 `.nsh-in` 自带 `width: 100%`,使下拉以"容器全宽"为基准且不可收缩,把输入框和删除按钮整体挤出面板。现下拉改为固定 118px,模式输入框 `min-width: 0` 允许收缩,窄窗口下整行可正常压缩;删除按钮从整颗「删除」胶囊改为紧凑 ✕ 图标按钮,行内布局不再拥挤。

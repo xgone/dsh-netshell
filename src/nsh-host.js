@@ -716,8 +716,9 @@ function makeAskpass(s) {
             }).then(function (handle) {
               s.handle = handle
               sessions.set(s.id, s)
-              var consume = function () {
-                return handle.output[Symbol.asyncIterator]().next().then(function (r) {
+              var outputIterator = handle.output[Symbol.asyncIterator]()
+               var consume = function () {
+                return outputIterator.next().then(function (r) {
                   if (!r.done) { onOutput(s, r.value); return consume() }
                 })
               }
@@ -766,8 +767,9 @@ function makeAskpass(s) {
         }).then(function (handle) {
           s.handle = handle
           sessions.set(s.id, s)
-          var consume = function () {
-            return handle.output[Symbol.asyncIterator]().next().then(function (r) {
+          var outputIterator = handle.output[Symbol.asyncIterator]()
+               var consume = function () {
+            return outputIterator.next().then(function (r) {
               if (!r.done) { onOutput(s, r.value); return consume() }
             })
           }
