@@ -14,6 +14,8 @@ const ok = (condition, label) => {
   console.log('ok', label)
 }
 
+ok(source.includes(".nsh-cursor{display:inline-block") && source.includes("background:var(--nsh-cursor)"), 'cursor uses a full-cell block style')
+
 let parsed = renderFns.lineSpans('abc\u001b[3C')
 ok(parsed.col === 6, 'cursor column advances across CSI C')
 ok(parsed.spans.map((x) => x.t).join('') === 'abc   ', 'trailing cursor space is preserved')
