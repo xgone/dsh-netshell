@@ -39,20 +39,20 @@
 
 | 动态沙箱 builtin | 静态模式落点(lib/index.js / lib/client.js) |
 |------|------|
-| `harness.handle(method, fn)` | 内存 handler 表 + 单一 `POST /netshell/rpc` JSON 分发(webServer 路由) |
+| `harness.handle(method, fn)` | 内存 handler 表 + 单一 `POST /netshell/rpc` JSON 分发(webServer 路由,先过 `connection.admit`) |
 | `harness.defineTool(def)` | `@deepseek-ai/dsh-tools` 的 `defineTool`(参数 schema 归一化) |
 | `harness.registerTool(ctx, t)` | `ctx.tools.register(t)` |
-| 客户端 `host.call(method, args)` | `fetch('/netshell/rpc')`(与宿主同一分发端点) |
+| 客户端 `host.call(method, args)` | `fetch('netshell/rpc')`(document-relative,支持挂载前缀;与宿主同一分发端点) |
 | 客户端 `styles.insert(css)` | `<style>` 注入 `document.head` |
 | 客户端 `ctx.timer` | 客户端无 timer 服务,包装层以 `setInterval/setTimeout` 增广 ctx |
-| 服务名 `subprocess` / `credentials` / `timer` | 同名——静态 loader 的 base bundle 提供同名服务(`@deepseek-ai/dsh-subprocess-local` / `dsh-credentials-local` / `cordis-plugin-timer`),inject 直接声明 |
+| 服务名 `subprocess` / `credentials` / `timer` / `connection` | 同名——Web profile 的 base bundle 提供服务,静态 loader 额外声明 `connection` 用于 RPC 认证 |
 
 **改代码只改 `src/`,然后 `pnpm test`**(build + check + smoke)。`lib/` 是生成物但入库提交,保证 git clone / link 安装零构建步骤。
 
 ## 3. 运行环境与宿主契约
 
 - 插件运行在 DSH 的 **node:vm 沙箱 realm**:没有 `require`,不能引第三方库——这是所有选型(包装 ssh 二进制、自绘 ANSI、手写 store)的根本原因。
-- **Host** `inject: ['subprocess', 'credentials', 'timer']`,用到:
+- **Host** 动态函数体声明 `inject: ['subprocess', 'credentials', 'timer', 'connection']`;静态 loader 另外注入 `tools` / `webServer`。`connection` 只用于 Web RPC 认证,自定义路由在读取请求体前必须 `admit`,用到:
   - `subprocess.spawnTerminal(spec)`:PTY 拉起交互式 `ssh`(会话);
   - `subprocess.spawn(spec)`:askpass 脚本落盘 / 清理、`ssh -T` 一次性命令执行(工具路径);
   - `subprocess.resolveExecutable('ssh')`:定位 ssh 二进制;
@@ -60,7 +60,7 @@
   - `harness.handle(method, fn)`:注册 RPC;`harness.defineTool` + `harness.registerTool`:注册模型工具;
   - `timer.timeout / interval`:轮询与等待。
 - **Client** 可用:`React`(代码风格为 `var x = React.useState(...)` 解构前写法)、`host.call`、`styles.insert`、`ctx.get('slots')`、`ctx.get('locale')`、`console`;slots:`conversation.view`(主区域 Tab,list-kind,`data-conversation-composer-overlay` 定高模式)、`settings.section`(设置页)。
-- 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现。
+- 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现;本地终端按 DSH 当前平台选择 shell,远程 SSH 辅助脚本当前仅支持 POSIX,Windows 远程请求会 fail-closed 并提示使用 DSH 内置本地终端。
 
 ## 4. 数据与持久化(为什么没有配置文件)
 
@@ -235,7 +235,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 
 - **包形态**:`package.json` 声明 `exports["./client"]` + `dsh.client`(`platform: web`)+ `dsh.bundle.patch` —— 这是 DSH client-modules 系统扫描浏览器半区、以及 profile launcher 识别 bundle 的契约(参照:`@deepseek-ai/dsh-client-modules` 的扫描逻辑与本仓库 cordis.patch.yml)。注意 `dsh.client.inject` 的语义是**依赖的 client 包名**(模块表到达顺序边),而模块自身 `export const inject = [...]` 是**服务名**——两层不要混淆;本包前者为 `[]`(slots/react 由既有启动图提供)。
 - **安装**:本机 profile 是 `~/.dsh/profiles/web`(pnpm workspace,patch 层为其中的 `cordis.patch.yml`)。`dsh plugin --profile web add link:<路径>` 会 pnpm 安装并自动把 bundle 追加进 `dsh.profile.bundles`(透明转发 pnpm + 按安装状态对账);模块解析是双锚(先 dsh 安装目录、后 profile 目录)。
-- **宿主半区服务**:`inject: ['subprocess', 'credentials', 'timer', 'tools', 'webServer']`(base bundle 提供同名服务行);RPC 走自注册 HTTP 路由(与 `@xgone/dsh-remote` 同一模式,auth gate 覆盖所有已注册及后注册路由)。**有意未走** `/api` 通用平面:`namespace/<method>` 派发要求宿主半区 `TypertRemoteService` + `@Remote` 标记,且浏览器半区必须挂载 `@deepseek-ai/dsh-typert-generator` 生成的严格 codec 描述符(`./remote` 产物 + `ctx.remote.$mount`)—— machinery 过重,对本插件的 10 个 JSON RPC 不划算;若未来需要流式/强 schema,再迁。
+- **宿主半区服务**:`inject: ['subprocess', 'credentials', 'timer', 'tools', 'webServer', 'connection']`(Web base bundle 提供同名服务行);RPC 走自注册 exact HTTP 路由,处理器先调用 `ctx.connection.admit({ headers: req.headers })` 再读取请求体,因此继承 DSH 的 Host/Origin 与浏览器认证门。Client 使用 document-relative `netshell/rpc`,支持 Web 应用挂载前缀。**有意未走** `/api` 通用平面:`namespace/<method>` 派发要求宿主半区 `TypertRemoteService` + `@Remote` 标记,且浏览器半区必须挂载 `@deepseek-ai/dsh-typert-generator` 生成的严格 codec 描述符(`./remote` 产物 + `ctx.remote.$mount`)—— machinery 过重,对本插件的 10 个 JSON RPC 不划算;若未来需要流式/强 schema,再迁。
 - **浏览器半区**:工厂形式 `window.__ModuleLoader__.load({ id, factory(require) })`,依赖经 `require('react')` 注入;不使用 `eval`/`new Function`,源码以真实代码内联(无 CSP 风险)。
 
 ## 12. npm 发布

@@ -61,8 +61,8 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 
 const name = 'netshell'
 
-/** 静态 loader 需要的服务:动态注入的三项 + 工具注册表 + Web 路由表。 */
-const inject = ['subprocess', 'credentials', 'timer', 'tools', 'webServer']
+/** 静态 loader 需要的服务:动态注入的三项 + 工具注册表 + Web 路由表 + 连接认证。 */
+const inject = ['subprocess', 'credentials', 'timer', 'tools', 'webServer', 'connection']
 
 /**
  * @param {import('@deepseek-ai/cordis').Context} ctx
@@ -109,6 +109,10 @@ function apply(ctx, config) {
         res.end(JSON.stringify(value))
       }
       try {
+        const admission = ctx.connection.admit({ headers: req.headers })
+        if ('rejection' in admission) {
+          return json(admission.rejection, { error: admission.rejection === 401 ? 'unauthorized' : 'forbidden' })
+        }
         if (req.method !== 'POST') return json(405, { error: 'method not allowed' })
         const parsed = JSON.parse((await readBody(req)) || '{}')
         const handler = handlers.get(String(parsed.method))
@@ -120,6 +124,11 @@ function apply(ctx, config) {
     },
   })
   ctx.effect(() => disposeRoute, 'netshell: rpc route')
+  if (typeof ctx.on === 'function') {
+    ctx.on('webserver/index-inject', (table) => {
+      table.push({ kind: 'global', name: '__DSH_NETSHELL_RPC_PATH__', value: routePath })
+    })
+  }
 
   // 内联动态源码(函数体):var …; return { inject, apply }
   const plugin = (function (harness) {
@@ -152,12 +161,18 @@ window.__ModuleLoader__.load({
 
     var __host = {
       call: function (method, args) {
-        return fetch('${RPC_PATH}', {
+        var route = (globalThis.__DSH_NETSHELL_RPC_PATH__ || '${RPC_PATH}').replace(/^\\//, '')
+        return fetch(route, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           credentials: 'same-origin',
           body: JSON.stringify({ method: method, args: args || {} }),
-        }).then(function (res) { return res.json() })
+        }).then(function (res) {
+          return res.json().catch(function () { return { error: 'HTTP ' + res.status } }).then(function (body) {
+            if (!res.ok) throw new Error(String((body && body.error) || ('HTTP ' + res.status)))
+            return body
+          })
+        })
       },
     }
 
@@ -165,6 +180,7 @@ window.__ModuleLoader__.load({
       insert: function (css) {
         var el = document.createElement('style')
         el.setAttribute('data-netshell', '')
+        el.setAttribute('data-plugin', '${PACKAGE_ID}')
         el.textContent = css
         document.head.appendChild(el)
         return function () { el.remove() }

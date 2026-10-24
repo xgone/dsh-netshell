@@ -117,11 +117,12 @@ function refFor(id) {
 var nsToken = Math.random().toString(36).slice(2, 8)
 
 return {
-  inject: ['subprocess', 'credentials', 'timer'],
+  inject: ['subprocess', 'credentials', 'timer', 'connection'],
   apply: function (ctx) {
     var subprocess = ctx.subprocess
     var credentials = ctx.credentials
     var timer = ctx.timer
+    var connection = ctx.connection
     var NL = String.fromCharCode(10)
     var sessions = new Map()
     var nonce = 0
@@ -208,20 +209,54 @@ return {
       s.pending = null
       s.closedReason = s.hint || ('远程会话结束 (exit=' + (outcome && outcome.exitCode != null ? outcome.exitCode : 'signal') + ')')
       pushEvent(s, { type: 'closed', reason: s.closedReason })
-      if (s.askpassPath) {
-        try {
-          subprocess.spawn({
-            argv: ['/bin/sh', '-c', 'rm -f -- "$1"', 'sh', s.askpassPath],
-            cwd: '/tmp',
-            stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 }, stderr: { maxBytes: 1024 } },
-            graceMs: 3000
-          })
-        } catch (e) {}
-      }
+      cleanupAskpass(s)
+    }
+
+    function cleanupAskpass(s) {
+      if (!s || !s.askpassPath) return
+      var path = s.askpassPath
+      s.askpassPath = null
+      try {
+        var cleanup = subprocess.spawn({
+          argv: ['/bin/sh', '-c', 'rm -f -- "$1"', 'sh', path],
+          cwd: '/tmp',
+          stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 }, stderr: { maxBytes: 1024 } },
+          graceMs: 3000
+        })
+        ignoreAsync(cleanup && cleanup.done)
+      } catch (e) {}
+    }
+
+    function ignoreAsync(value) {
+      try {
+        if (value && typeof value.catch === 'function') value.catch(function () {})
+      } catch (e) {}
     }
 
     function write(s, data) {
-      try { void s.handle.write(data) } catch (e) {}
+      if (!s || !s.handle) return Promise.resolve()
+      var previous = s.writeQueue || Promise.resolve()
+      var job = previous.catch(function () {}).then(function () { return s.handle.write(data) })
+      s.writeQueue = job
+      // Callers that do not need to await the write still must not create an
+      // unhandled rejection when an SSH PTY disappears concurrently.
+      job.catch(function () {})
+      return job
+    }
+
+    function waitWrites(s) {
+      return s && s.writeQueue ? s.writeQueue : Promise.resolve()
+    }
+
+    function terminateHandle(s) {
+      if (!s || !s.handle) return Promise.resolve()
+      try {
+        var job = Promise.resolve(s.handle.terminate())
+        job.catch(function () {})
+        return job
+      } catch (e) {
+        return Promise.reject(e)
+      }
     }
 
     function submitEnter(s) {
@@ -497,15 +532,19 @@ return {
         if (entry) entry.decision = action
       }
       if (action === 'deny') {
-        if (canWrite && from === 'line') write(s, '\u0015')
-        pushEvent(s, { type: 'deny', command: cmd, rule: '用户拒绝' })
-        return Promise.resolve({ ok: true })
+        var denyWrite = canWrite && from === 'line' ? write(s, '\u0015') : Promise.resolve()
+        return denyWrite.then(function () {
+          pushEvent(s, { type: 'deny', command: cmd, rule: '用户拒绝' })
+          return { ok: true }
+        })
       }
       var after = function () {
-        if (canWrite && from === 'line') write(s, '\r')
-        if (hasHist && from === 'line') s.hist.push(cmd)
-        pushEvent(s, { type: 'ask-allow', command: cmd })
-        return Promise.resolve({ ok: true })
+        var allowWrite = canWrite && from === 'line' ? write(s, '\r') : Promise.resolve()
+        return allowWrite.then(function () {
+          if (hasHist && from === 'line') s.hist.push(cmd)
+          pushEvent(s, { type: 'ask-allow', command: cmd })
+          return { ok: true }
+        })
       }
       if (action === 'always') {
         return addServerAllowRule(s.server, cmd).then(after)
@@ -638,12 +677,11 @@ function makeAskpass(s) {
       var id = args && args.id
       if (!id) return Promise.reject(new Error('缺少 id'))
       revokeModelAuthorizations(id)
+      var stopJobs = []
       sessions.forEach(function (s) {
-        if (s.server && s.server.id === id && s.status !== 'closed') {
-          try { void s.handle.terminate() } catch (e) {}
-        }
+        if (s.server && s.server.id === id && s.status !== 'closed') stopJobs.push(terminateHandle(s))
       })
-      return credentials.readRecord(PKEY).then(function (rec) {
+      return Promise.all(stopJobs).then(function () { return credentials.readRecord(PKEY) }).then(function (rec) {
         if (!rec || rec.kind !== 'grant' || !rec.payload || !Array.isArray(rec.payload.servers)) return { ok: true }
         rec.payload.servers = rec.payload.servers.filter(function (x) { return x && x.id !== id })
         return credentials.modifyRecord(PKEY, function () { return rec }).then(function () {
@@ -673,8 +711,19 @@ function makeAskpass(s) {
       return s
     }
 
-    function spawnSession(server) {
-      return subprocess.resolveExecutable('ssh').then(function (sshPath) {
+    function assertRemotePlatform() {
+      if (typeof subprocess.terminalEnvironment !== 'function') return Promise.resolve()
+      return subprocess.terminalEnvironment().then(function (env) {
+        if (env && env.platform === 'windows') {
+          return Promise.reject(new Error('NetShell 远程 SSH 当前需要 POSIX 运行环境; Windows 设备请使用 DSH 内置本地终端'))
+        }
+      })
+    }
+
+    function spawnSession(server, signal) {
+      return assertRemotePlatform().then(function () {
+        return subprocess.resolveExecutable('ssh')
+      }).then(function (sshPath) {
         var s = {
           id: 'ns' + Date.now().toString(36) + (++nonce),
           server: server, status: 'connecting', outAll: '', outBase: 0, dropped: 0,
@@ -712,7 +761,8 @@ function makeAskpass(s) {
               env.NETSHELL_PW = pw
             }
             return subprocess.spawnTerminal({
-              argv: argv, cwd: '/tmp', env: env, rows: ROWS, cols: COLS, graceMs: 3000
+              argv: argv, cwd: '/tmp', env: env, rows: ROWS, cols: COLS,
+              terminalType: 'xterm-256color', graceMs: 3000, signal: signal
             }).then(function (handle) {
               s.handle = handle
               sessions.set(s.id, s)
@@ -763,7 +813,8 @@ function makeAskpass(s) {
             ? [shell.path, '-NoLogo', '-NoExit']
             : [shell.path, '-i']
         return subprocess.spawnTerminal({
-          argv: argv, cwd: '.', env: { TERM: 'xterm-256color' }, rows: ROWS, cols: COLS, graceMs: 3000
+          argv: argv, cwd: '.', env: { TERM: 'xterm-256color' }, rows: ROWS, cols: COLS,
+          terminalType: 'xterm-256color', graceMs: 3000
         }).then(function (handle) {
           s.handle = handle
           sessions.set(s.id, s)
@@ -788,10 +839,10 @@ function makeAskpass(s) {
       return found
     }
 
-    function ensureSession(server) {
+    function ensureSession(server, signal) {
       var existing = findOpenSession(server.id)
       if (existing) return Promise.resolve(existing)
-      return spawnSession(server)
+      return spawnSession(server, signal)
     }
 
     function ensureModelSession(server, cmd, exec) {
@@ -809,7 +860,7 @@ function makeAskpass(s) {
           // 真人批准后,授权保留到插件生命周期结束或用户主动断开该服务器;
           // 授权只对当前 Agent 生效,底层 SSH 会话仍由所有 Agent 共享。
           grantModelAuthorization(agent, server.id)
-          return ensureSession(server).then(function (session) {
+          return ensureSession(server, exec && exec.signal).then(function (session) {
             return { approved: true, session: session }
           }, function (e) {
             return {
@@ -852,15 +903,15 @@ function makeAskpass(s) {
     }
 
     function cancelPending(s, cmd) {
-      if (s.pending) {
-        var from = s.pending.from || 'line'
-        var rule = s.pending.rule || ''
-        s.pending = null
-        // 只有「人工敲入的行」才需要向远端发 \u0015 清掉已回写的命令;工具挂起从未
-        // 碰过 PTY 行缓冲,清行反而会误伤用户可能正在输入的内容。
-        if (from === 'line' && s.handle) write(s, '\u0015')
-        pushEvent(s, { type: 'deny', command: cmd, rule: rule || '超时或已取消' })
-      }
+      if (!s.pending) return Promise.resolve()
+      var from = s.pending.from || 'line'
+      var rule = s.pending.rule || ''
+      s.pending = null
+      // 只有「人工敲入的行」才需要向远端发 \u0015 清掉已回写的命令;工具挂起从未
+      // 碰过 PTY 行缓冲,清行反而会误伤用户可能正在输入的内容。
+      var clear = from === 'line' && s.handle ? write(s, '\u0015') : Promise.resolve()
+      pushEvent(s, { type: 'deny', command: cmd, rule: rule || '超时或已取消' })
+      return clear
     }
 
     function collectOutput(s, fromAbs, opts) {
@@ -905,9 +956,11 @@ function makeAskpass(s) {
         var pid = 'pd' + nonce
         s.pending = { id: pid, command: cmd, rule: ruleNote || 'locked 模式白名单外' }
         pushEvent(s, { type: 'ask', command: cmd, rule: ruleNote || 'locked 模式白名单外' })
-        return waitPendingGone(s, pid, Date.now() + 300000, signal).then(function (res) {
-          if (res.outcome === 'aborted') { cancelPending(s, cmd); return { ok: false, blocked: true, action: 'aborted', output: '', command: cmd } }
-          if (res.outcome === 'timeout') { cancelPending(s, cmd); return { ok: false, blocked: true, action: 'timeout', output: '', command: cmd } }
+        return waitWrites(s).then(function () {
+          return waitPendingGone(s, pid, Date.now() + 300000, signal)
+        }).then(function (res) {
+          if (res.outcome === 'aborted') return cancelPending(s, cmd).then(function () { return { ok: false, blocked: true, action: 'aborted', output: '', command: cmd } })
+          if (res.outcome === 'timeout') return cancelPending(s, cmd).then(function () { return { ok: false, blocked: true, action: 'timeout', output: '', command: cmd } })
           var lastEv = s.events[s.events.length - 1]
           var allowed = lastEv && (lastEv.type === 'ask-allow' || lastEv.type === 'exec')
           if (!allowed) return { ok: false, blocked: true, action: 'deny', rule: '用户拒绝', output: '', command: cmd }
@@ -922,7 +975,9 @@ function makeAskpass(s) {
       s.hist.push(cmd)
       if (s.hist.length > HIST_CAP) s.hist.shift()
       pushEvent(s, { type: 'exec', command: cmd })
-      return collectOutput(s, fromAbs, { timeoutMs: timeoutMs }).then(function (output) {
+      return waitWrites(s).then(function () {
+        return collectOutput(s, fromAbs, { timeoutMs: timeoutMs })
+      }).then(function (output) {
         return { ok: true, action: 'allow', output: output, command: cmd, blocked: false }
       })
     }
@@ -943,30 +998,56 @@ function makeAskpass(s) {
     }
 
     function runRemote(server, cmd, timeoutMs, signal) {
-      return Promise.all([subprocess.resolveExecutable('ssh'), knownHostsFile()]).then(function (rs) {
-        var sshPath = rs[0]
-        var khFile = rs[1]
-        var argv = [sshPath, '-T',
-          '-o', 'StrictHostKeyChecking=accept-new',
-          '-o', 'UserKnownHostsFile=' + khFile,
-          '-o', 'NumberOfPasswordPrompts=1',
-          '-o', 'ConnectTimeout=12']
-        if (server.auth === 'key') {
-          if (!server.keyPath) return Promise.reject(new Error('私钥认证需要填写私钥路径'))
-          argv.push('-i', server.keyPath, '-o', 'IdentitiesOnly=yes')
-        }
-        argv.push('-p', String(server.port || 22), server.user + '@' + server.host, cmd)
-        var handle = subprocess.spawn({
-          argv: argv,
-          cwd: '/tmp',
-          stdio: { stdin: 'ignore', stdout: { maxBytes: 200000, spill: { maxBytes: 400000 } }, stderr: { maxBytes: 200000 } },
-          graceMs: 3000,
-          signal: signal
+      var passwordJob = server.auth === 'password'
+        ? credentials.resolve(refFor(server.id)).then(function (rc) {
+          if (!rc || !rc.value) return Promise.reject(new Error('该服务器未设置密码,请先在设置中保存密码'))
+          return rc.value
         })
-        return handle.done.then(function (out) {
-          var stdout = handle.collected && handle.collected.stdout ? handle.collected.stdout.readFrom(0).text : ''
-          var stderr = handle.collected && handle.collected.stderr ? handle.collected.stderr.readFrom(0).text : ''
-          return { code: out.exitCode, stdout: stdout, stderr: stderr }
+        : Promise.resolve(null)
+      return assertRemotePlatform().then(function () {
+        return Promise.all([subprocess.resolveExecutable('ssh'), knownHostsFile(), passwordJob]).then(function (rs) {
+          var sshPath = rs[0]
+          var khFile = rs[1]
+          var password = rs[2]
+          var askpass = { askpassPath: null }
+          var askpassJob = server.auth === 'password' ? makeAskpass(askpass) : Promise.resolve(null)
+          return askpassJob.then(function () {
+            var argv = [sshPath, '-T',
+              '-o', 'StrictHostKeyChecking=accept-new',
+              '-o', 'UserKnownHostsFile=' + khFile,
+              '-o', 'NumberOfPasswordPrompts=1',
+              '-o', 'ConnectTimeout=12']
+            if (server.auth === 'key') {
+              if (!server.keyPath) return Promise.reject(new Error('私钥认证需要填写私钥路径'))
+              argv.push('-i', server.keyPath, '-o', 'IdentitiesOnly=yes')
+            }
+            argv.push('-p', String(server.port || 22), server.user + '@' + server.host, cmd)
+            var env = {}
+            if (server.auth === 'password') {
+              env.SSH_ASKPASS = askpass.askpassPath
+              env.SSH_ASKPASS_REQUIRE = 'force'
+              env.NETSHELL_PW = password
+            }
+            var handle = subprocess.spawn({
+              argv: argv,
+              cwd: '/tmp',
+              env: env,
+              stdio: { stdin: 'ignore', stdout: { maxBytes: 200000, spill: { maxBytes: 400000 } }, stderr: { maxBytes: 200000 } },
+              graceMs: 3000,
+              signal: signal
+            })
+            return handle.done.then(function (out) {
+              var stdout = handle.collected && handle.collected.stdout ? handle.collected.stdout.readFrom(0).text : ''
+              var stderr = handle.collected && handle.collected.stderr ? handle.collected.stderr.readFrom(0).text : ''
+              return { code: out.exitCode, stdout: stdout, stderr: stderr }
+            }).then(function (value) {
+              cleanupAskpass(askpass)
+              return value
+            }, function (error) {
+              cleanupAskpass(askpass)
+              throw error
+            })
+          })
         })
       })
     }
@@ -998,8 +1079,10 @@ function makeAskpass(s) {
                // 下一次模型调用可以自动重连,不复用这条半连接状态。
                if (disp.status === 'connecting') {
                  disp.hint = '连接等待超时或已取消'
-                 try { void disp.handle.terminate() } catch (e) {}
-                 onExit(disp, { exitCode: null, signal: 'timeout' })
+                 return terminateHandle(disp).catch(function () {}).then(function () {
+                   onExit(disp, { exitCode: null, signal: 'timeout' })
+                   return { ok: false, blocked: false, error: '会话未就绪或已断开:' + (disp.closedReason || disp.hint || 'unknown'), output: '' }
+                 })
                }
                return { ok: false, blocked: false, error: '会话未就绪或已断开:' + (disp.closedReason || disp.hint || 'unknown'), output: '' }
              }
@@ -1169,7 +1252,7 @@ harness.handle('netshell.input', function (args) {
         if (data.length === 1 || (data.indexOf('\r') === -1 && data.indexOf('\n') === -1)) onInput(s, data)
         else feedMultiline(s, data)
       }
-      return Promise.resolve({ ok: true })
+      return waitWrites(s).then(function () { return { ok: true } })
     })
 
     harness.handle('netshell.poll', function (args) {
@@ -1202,17 +1285,20 @@ harness.handle('netshell.input', function (args) {
     harness.handle('netshell.disconnect', function (args) {
       var s = sessions.get(args && args.id)
       if (!s) return Promise.resolve({ ok: true })
-      if (s.handle) { try { void s.handle.terminate() } catch (e) {} }
-      // 退出即移除:之前只 terminate 不移除,会话残留在 sessions Map,
-      // 客户端 discoverSessions 下一轮又会把它加回来,导致「点了删除却删不掉」。
-      var serverId = s.server && s.server.id
-      if (serverId) {
-       // 只有用户主动断开才撤销服务器级模型授权;
-       // 网络/SSH 退出走 onExit,不会触碰这个集合。
-       revokeModelAuthorizations(serverId)
-      }
-      sessions.delete(args && args.id)
-      return Promise.resolve({ ok: true })
+      // 终止是异步的,尤其是 SSH-backed PTY;等待它完成后再移除会话,
+      // 避免客户端看到已删除但远端进程仍存活。
+      return terminateHandle(s).then(function () {
+        // 退出即移除:之前只 terminate 不移除,会话残留在 sessions Map,
+        // 客户端 discoverSessions 下一轮又会把它加回来,导致「点了删除却删不掉」。
+        var serverId = s.server && s.server.id
+        if (serverId) {
+          // 只有用户主动断开才撤销服务器级模型授权;
+          // 网络/SSH 退出走 onExit,不会触碰这个集合。
+          revokeModelAuthorizations(serverId)
+        }
+        sessions.delete(args && args.id)
+        return { ok: true }
+      })
     })
 
     
@@ -1233,7 +1319,11 @@ harness.handle('netshell.input', function (args) {
           var payload = rec && rec.kind === 'grant' ? rec.payload : null
           var servers = payload && Array.isArray(payload.servers) ? payload.servers : []
           var list = servers.map(function (sv) {
-            return { id: sv.id, name: sv.name, host: sv.host, port: sv.port, user: sv.user, auth: sv.auth, level: sv.level }
+            return {
+              id: sv.id || '', name: sv.name || '', host: sv.host || '',
+              port: typeof sv.port === 'number' ? sv.port : 22,
+              user: sv.user || '', auth: sv.auth || 'password', level: sv.level || 'guarded'
+            }
           })
           return { servers: list }
         })
@@ -1242,7 +1332,7 @@ harness.handle('netshell.input', function (args) {
 
     var runTool = harness.defineTool({
       name: 'netshell_run',
-      description: '仅当用户明确要求在指定远程服务器上执行命令时使用;本机问题优先使用本地工具,不要根据“网络问题”或“服务异常”等模糊描述自行选择远程服务器。在指定服务器(NetShell 终端)上执行一条 shell 命令并返回输出。当前模型会话首次使用服务器或用户主动断开后,插件会先要求用户确认远程连接,确认前不会建立 SSH。命令通过真实 SSH 终端执行,支持权限控制:命中 deny 规则(如 rm -rf /)直接拦截;命中 ask 规则(如 rm -rf *)时,本工具会直接在对话窗口弹出原生确认卡并原地等待用户选择(执行一次 / 永久放行该命令 / 拒绝),无需你再调用 ask_user_question;仅当当前环境无法弹卡(子代理上下文或无界面)时,连接确认和危险命令确认都会安全拒绝,不会自动建连。用 netshell_servers 查询服务器 id 作为 server 参数。',
+      description: '仅当用户明确要求在指定远程服务器上执行命令时使用。本地终端命令(当前设备上的命令)不要使用本插件执行,必须使用 DSH 内置的本地终端工具。本机问题优先使用本地工具,不要根据“网络问题”或“服务异常”等模糊描述自行选择远程服务器。在指定服务器(NetShell 终端)上执行一条 shell 命令并返回输出。当前模型会话首次使用服务器或用户主动断开后,插件会先要求用户确认远程连接,确认前不会建立 SSH。命令通过真实 SSH 终端执行,支持权限控制:命中 deny 规则(如 rm -rf /)直接拦截;命中 ask 规则(如 rm -rf *)时,本工具会直接在对话窗口弹出原生确认卡并原地等待用户选择(执行一次 / 永久放行该命令 / 拒绝),无需你再调用 ask_user_question;仅当当前环境无法弹卡(子代理上下文或无界面)时,连接确认和危险命令确认都会安全拒绝,不会自动建连。用 netshell_servers 查询服务器 id 作为 server 参数。',
       parameters: {
         server: { type: 'string', description: '服务器 id,来自 netshell_servers 返回的 id 字段', required: true },
         command: { type: 'string', description: '要在服务器上执行的 shell 命令', required: true },
@@ -1274,9 +1364,11 @@ ctx.effect(function () {
         askTokens.clear()
         modelConnectJobs.clear()
         modelAuthorizedServers.clear()
+        var jobs = []
         sessions.forEach(function (s) {
-          if (s.handle) { try { void s.handle.terminate() } catch (e) {} }
+          if (s.handle) jobs.push(terminateHandle(s).catch(function () {}))
         })
+        return Promise.all(jobs)
       }
     })
   }

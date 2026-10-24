@@ -2,6 +2,12 @@
 
 这里记录面向使用者的功能更新。实现约束和接口变化请看 [TECHNICAL.md](TECHNICAL.md)，完整历史请看 [CHANGELOG.md](CHANGELOG.md)。
 
+## DSH 兼容性说明
+
+- 当前分支面向 DSH `0.2.1` Web profile；本地兼容性审查基于上游 `dsh-v0.2.1-rc.2`，安装时需要匹配的 `@deepseek-ai/dsh-tools` 与 DSH peer，旧版 DSH 不在支持范围内。
+- 本地终端命令应使用 DSH 内置本地终端工具，不要通过 `netshell_run` 执行；NetShell 的模型工具只用于用户明确指定的远程服务器。
+- 远程 SSH 辅助脚本当前仅支持 POSIX 运行环境；Windows 设备上的本地终端仍可用，远程请求会安全拒绝并提示使用内置本地终端。
+
 ## 0.6.1 · 2026-09-07
 
 ### 新增

@@ -1,6 +1,8 @@
 # 动态加载操作手册(给新会话 / AI Agent)
 
-> 目标:在新 DSH 会话中把本插件的 `src/nsh-host.js` 与 `src/nsh-client.js` 作为动态 Cordis Plugin 的 **Host / Client 两个半区**一次性加载成功,不再试错。
+> 重要:DSH `0.2.1` 的 stock Web profile 已移除模型可调用的 `cordis_define` / `cordis_run` 持久动态装载路径;正常使用本插件应通过 Plugin Manager 安装本仓库的 bundle(`dsh.bundle.patch`),不要照本文旧流程调用不存在的 mutation tool。
+> 本文只保留给启用了 legacy/custom Cordis runner 的开发环境作源码半区参考;该环境必须提供 `connection` 服务,否则 RPC 应 fail-closed,不能省略认证门。
+> 目标:在兼容的动态 Cordis composition 中把本插件的 `src/nsh-host.js` 与 `src/nsh-client.js` 作为 **Host / Client 两个半区**一次性加载成功。
 > 本文按 2026-09 实际操作验证过的流程编写,包含全部踩过的坑。
 
 ## 0. 前置事实(源码形态决定了加载方式)
@@ -9,7 +11,7 @@
 
 | 半区 | 文件 | 自由变量(沙箱 builtin,勿传参) | inject 依赖 | 返回 |
 |------|------|------|------|------|
-| Host | `src/nsh-host.js`(约 816 行) | `harness` | `['subprocess', 'credentials', 'timer']` | `{ inject, apply }` |
+| Host | `src/nsh-host.js`(约 816 行) | `harness` | `['subprocess', 'credentials', 'timer', 'connection']` | `{ inject, apply }` |
 | Client | `src/nsh-client.js`(约 1140 行,0.3.0 起全文件多行化) | `React`、`host`、`styles` | `['timer', 'locale']`,内部 `ctx.get('slots')` | `{ inject, apply }` |
 
 - Host 通过 `harness.handle(...)` 注册 10 个 Client→Host RPC(`netshell.profiles.list/save/delete`、`netshell.connect`、`netshell.local.connect`、`netshell.sessions.list`、`netshell.input`、`netshell.poll`、`netshell.decide`、`netshell.disconnect`),并用 `harness.defineTool` + `harness.registerTool(ctx, t)` 注册两个模型工具。
@@ -58,7 +60,7 @@
 7. **每个新 packageId 都需要 UI 批准**(单勾只授权当前包)。批准前 run 返回 `awaiting-approval` 属正常,**不要重试,等用户点击**;用户拒绝后不要再发。
 8. **失败后的修复路径**:技术失败(如 client-half-failed)→ 用 `cordis_inspect_self(pluginId, packageId)` 读存储的源码定位差异 → 在**同一插件**下 define 新包 → 重新 run。坏掉的废弃插件用 `cordis_undefine` 清理,正在用的用 `cordis_stop` 临时停用。
 9. **客户端 Slot 查询**(Slots.listSubTree)在本环境可能报 `"input" must be an object`(传输层问题),不必纠结——本插件三个 Slot 的注册协议以本文档 §0 为准,源码即事实。
-10. **动态注册的 `order` 会被 runner guard 覆盖(0.4.0 配套 harness 修复)**。cordis-client-runner 的 `guardedSlots` 曾对所有非 chain 注册强制 `priority = allocatePriority()`(递减,后注册排前),而槽位排序是 priority 优先、`order` 兜底——结果是动态插件传的 `order` 完全失效,注册项被钉在列表最前(0.4.0 前本插件 Tab 因此显示在最左)。已在上游 guard 中豁免 list 类槽位(list 保留文档化 `order` 语义;single/keyed shadowing 与 chain 选举不变),并重新构建了 web 产物。判断这类「顺序不生效」问题别先怀疑自己的 `order` 值——先看 guard 有没有注入 priority。
+10. **动态注册的 `order` 在 DSH 0.2.1-rc.2 runner 中仍可能被覆盖**。当前 `cordis-client-runner` 对非 chain 注册（包括 list）注入动态 `priority`，而槽位排序优先看 `priority`，所以动态模式下本插件的 Tab、Settings 和 Header utility 顺序取决于加载顺序，不能把 `order` 当作稳定排序契约。静态 Loader 模式不经过这个 dynamic guard，`order` 正常生效；需要稳定布局时优先使用静态 bundle。
 
 ## 3. 激活前校验(强烈建议,能省一轮失败)
 

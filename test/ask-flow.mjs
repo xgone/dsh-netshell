@@ -53,7 +53,10 @@ function termOut() {
 }
 const ptyWrites = []
 const sweeps = [] // TOOL_ASK_TTL 级 timer 的手动触发句柄
+let terminalPlatform = 'posix'
 let spawnTerminalCalls = 0
+const terminalSpecs = []
+const spawnSpecs = []
 const terminalDoneResolvers = []
 const timer = {
   timeout: (ms) => ms >= 600000
@@ -63,14 +66,22 @@ const timer = {
 }
 const subprocess = {
   resolveExecutable: async () => '/usr/bin/ssh',
-  spawnTerminal: async () => {
+  terminalEnvironment: async () => ({ platform: terminalPlatform }),
+  spawnTerminal: async (spec) => {
+    terminalSpecs.push(spec)
     spawnTerminalCalls += 1
     let finish
     const done = new Promise((resolve) => { finish = resolve })
     terminalDoneResolvers.push(finish)
-    return { pid: 123 + spawnTerminalCalls, output: termOut(), write: (d) => { ptyWrites.push(d) }, terminate() {}, done }
+    return {
+      pid: 123 + spawnTerminalCalls,
+      output: termOut(),
+      write: (d) => new Promise((resolve) => { setTimeout(() => { ptyWrites.push(d); resolve() }, 2) }),
+      terminate: () => new Promise((resolve) => { setTimeout(resolve, 2) }),
+      done,
+    }
   },
-  spawn: () => sshOut('ok-output'),
+  spawn: (spec) => { spawnSpecs.push(spec); return sshOut('ok-output') },
 }
 
 // userQuestions 桩:验证插件的调用形态并按 mode 决定回答/拒绝
@@ -110,13 +121,23 @@ const fakeUQ = {
 const registeredTools = {}
 let rpcHandler = null
 const hostCtx = {
-  subprocess, credentials, timer,
+  subprocess, credentials, timer, connection: { admit: () => ({ peer: {} }) },
   tools: { register: (t) => { registeredTools[t.name] = t; return () => {} } },
   webServer: { register: (route) => { rpcHandler = route.handler; return () => {} } },
   effect(fn) { fn(); return () => {} },
   get(name) { return name === 'userQuestions' ? fakeUQ : undefined },
 }
 host.apply(hostCtx, { enabled: true, routePath: '/netshell/rpc' })
+ok(registeredTools.netshell_run.description.includes('本地终端命令')
+  && registeredTools.netshell_run.description.includes('不要使用本插件执行'), '工具声明本地终端命令不得通过插件执行')
+const savedAuth = record.payload.servers[0].auth
+const savedLevel = record.payload.servers[0].level
+delete record.payload.servers[0].auth
+delete record.payload.servers[0].level
+const legacyServers = await registeredTools.netshell_servers.execute({}, { agent: AGENT, signal: undefined })
+ok(legacyServers.servers[0].auth === 'password' && legacyServers.servers[0].level === 'guarded', '旧档案缺少 auth/level 时工具输出仍为合法 JSON')
+record.payload.servers[0].auth = savedAuth
+record.payload.servers[0].level = savedLevel
 
 const server = createServer((req, res) => rpcHandler(req, res))
 await new Promise((r) => server.listen(0, '127.0.0.1', r))
@@ -148,6 +169,7 @@ fakeUQ.releaseConnection('允许本次连接')
 let r = await firstRun
 const concurrentResult = await concurrentRun
 ok(r.ok === true && String(r.output).includes('ok-output'), 'A0: 允许连接后才执行远程命令')
+ok(terminalSpecs[0] && terminalSpecs[0].terminalType === 'xterm-256color', 'A0: 远程终端声明 terminalType')
 ok(concurrentResult.ok === true && String(concurrentResult.output).includes('ok-output'), 'A0: 并发调用复用已确认会话')
 ok(outputIteratorCalls === spawnTerminalCalls, 'A0: 每个终端只创建一个输出迭代器')
 
@@ -277,7 +299,7 @@ const host2 = await import(pathToFileURL(join(root, 'lib/index.js')).href)
 const registered2 = {}
 let rpcHandler2 = null
 host2.apply({
-  subprocess, credentials, timer,
+  subprocess, credentials, timer, connection: { admit: () => ({ peer: {} }) },
   tools: { register: (t) => { registered2[t.name] = t; return () => {} } },
   webServer: { register: (route) => { rpcHandler2 = route.handler; return () => {} } },
   effect(fn) { fn(); return () => {} },
@@ -339,6 +361,26 @@ ok(ptyWrites.join('').includes('echo hi\r'), 'D3: 第一段良性命令已执行
 ok(!!snap.pending && snap.pending.command === CMD, 'D3: 第二段危险命令被 Guard 拦下')
 ok(!ptyWrites.join('').includes('shutdown -h now\r'), 'D3: 危险命令回车未直达 PTY')
 await rpc('netshell.decide', { id: conn.id, pendingId: snap.pending.id, action: 'deny' })
+
+// D4: 密码档案的模型直连路径必须注入 askpass,不能因使用 -T 而丢失密码。
+record.payload.servers[0].auth = 'password'
+r = await run({ command: 'echo password-auth' })
+let passwordSpec = null
+for (let i = spawnSpecs.length - 1; i >= 0; i--) {
+  if (spawnSpecs[i].env && spawnSpecs[i].env.NETSHELL_PW === 'pw') { passwordSpec = spawnSpecs[i]; break }
+}
+ok(r.ok === true && passwordSpec && passwordSpec.env.SSH_ASKPASS && passwordSpec.env.SSH_ASKPASS_REQUIRE === 'force', 'D4: netshell_run 密码认证注入 askpass')
+record.payload.servers[0].auth = 'agent'
+
+// D5: 本地终端同样必须满足 rc1 的 terminalType 契约。
+const local = await rpc('netshell.local.connect', {})
+ok(terminalSpecs.at(-1) && terminalSpecs.at(-1).terminalType === 'xterm-256color', 'D4: 本地终端声明 terminalType')
+await rpc('netshell.disconnect', { id: local.id })
+
+terminalPlatform = 'windows'
+const windowsRemote = await rpc('netshell.connect', { serverId: 'srv1' })
+ok(String(windowsRemote.error).includes('POSIX'), 'D5: Windows 远程 SSH fail-closed')
+terminalPlatform = 'posix'
 
 console.log(fail === 0 ? 'ASK-FLOW-OK' : `ASK-FLOW-FAILED (${fail} failures)`)
 if (fail > 0) process.exitCode = 1

@@ -6,7 +6,7 @@
  *   node test/smoke.mjs   (或 pnpm test)
  */
 import { createServer } from 'node:http'
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -29,21 +29,39 @@ function ok(condition, label) {
 // ── 宿主半区:装配 + RPC 路由挂到真实 http server ─────────────────────────
 const host = await import(pathToFileURL(join(root, 'lib/index.js')).href)
 ok(host.name === 'netshell', '宿主导出 name=netshell')
-ok(Array.isArray(host.inject) && ['subprocess', 'credentials', 'timer', 'tools', 'webServer'].every(s => host.inject.includes(s)), '宿主 inject 覆盖所需服务')
+ok(Array.isArray(host.inject) && ['subprocess', 'credentials', 'timer', 'tools', 'webServer', 'connection'].every(s => host.inject.includes(s)), '宿主 inject 覆盖所需服务')
 
 const fakeCredentials = {
   readRecord: async () => ({ kind: 'grant', payload: { version: 1, servers: [{ id: 'srv1', name: 'dev-box', host: '10.0.0.5', port: 22, user: 'deploy', auth: 'agent', level: 'guarded' }] } }),
 }
 const registeredTools = {}
 let rpcHandler = null
+let admitted = true
+const indexListeners = []
+const connection = { admit: () => admitted ? { peer: {} } : { rejection: 401 } }
 const hostCtx = {
-  subprocess: {}, credentials: fakeCredentials, timer: {},
+  subprocess: {}, credentials: fakeCredentials, timer: {}, connection,
   tools: { register: (tool) => { registeredTools[tool.name] = tool; return () => {} } },
   webServer: { register: (route) => { rpcHandler = route.handler; return () => {} } },
+  on(name, listener) { if (name === 'webserver/index-inject') indexListeners.push(listener); return () => {} },
   effect(fn) { const d = fn(); return () => { if (typeof d === 'function') d() } },
 }
 host.apply(hostCtx, { enabled: true, routePath: '/netshell/rpc' })
 ok(typeof rpcHandler === 'function', 'webServer 路由已注册')
+const indexRows = []
+for (const listener of indexListeners) listener(indexRows)
+ok(indexRows.some(row => row.name === '__DSH_NETSHELL_RPC_PATH__' && row.value === '/netshell/rpc'), '默认 RPC 路径写入 Web boot injection')
+let customRoutePath = null
+const customRows = []
+host.apply({
+  ...hostCtx,
+  tools: { register: () => () => {} },
+  webServer: { register: (route) => { customRoutePath = route.path; return () => {} } },
+  on(name, listener) { if (name === 'webserver/index-inject') customRows.push(listener); return () => {} },
+}, { enabled: true, routePath: '/custom/rpc' })
+const customIndexRows = []
+for (const listener of customRows) listener(customIndexRows)
+ok(customRoutePath === '/custom/rpc' && customIndexRows.some(row => row.value === '/custom/rpc'), '自定义 RPC 路径同步到 Host 与 boot injection')
 ok(registeredTools.netshell_servers && registeredTools.netshell_run, 'netshell_servers / netshell_run 已注册')
 
 // 服务器侧直连工具执行(过 defineTool 归一化后的定义)
@@ -60,6 +78,12 @@ const rpc = async (method, body, method_) => {
 }
 const sessions = await rpc('netshell.sessions.list', JSON.stringify({ method: 'netshell.sessions.list', args: {} }))
 ok(sessions.status === 200 && Array.isArray(sessions.json.sessions), 'RPC: sessions.list → 200')
+admitted = false
+const unauthorized = await rpc('netshell.sessions.list', JSON.stringify({ method: 'netshell.sessions.list', args: {} }))
+ok(unauthorized.status === 401, 'RPC: 未认证请求 → 401')
+const unauthorizedGet = await rpc(null, null, 'GET')
+ok(unauthorizedGet.status === 401, 'RPC: 未认证 GET 先过认证门 → 401')
+admitted = true
 const missing = await rpc('nope', JSON.stringify({ method: 'nope', args: {} }))
 ok(missing.status === 404, 'RPC: 未知方法 → 404')
 const badMethod = await rpc(null, null, 'GET')
@@ -70,9 +94,15 @@ ok(broken.status === 500, 'RPC: 非法 JSON → 500')
 // ── 客户端半区:window/__ModuleLoader__/require/document 桩 + 装配 ─────────
 const registrations = []
 const insertedStyles = []
+const clientFetches = []
+globalThis.__DSH_NETSHELL_RPC_PATH__ = '/custom/rpc'
+globalThis.fetch = async (input) => {
+  clientFetches.push(String(input))
+  return { ok: true, status: 200, json: async () => ({ servers: [], sessions: [] }) }
+}
 globalThis.window = { __ModuleLoader__: { load(definition) { globalThis.__clientDef = definition } } }
 globalThis.document = {
-  createElement: () => ({ setAttribute() {}, textContent: '' }),
+  createElement: () => ({ setAttribute() {}, textContent: '', remove() {} }),
   head: { appendChild(el) { insertedStyles.push(el) } },
 }
 const reactStub = { createElement: (type, props, ...children) => ({ type, props, children }) }
@@ -93,8 +123,13 @@ const clientCtx = {
   effect(fn) { const d = fn(); clientEffects.push(d); return () => { if (typeof d === 'function') d() } },
 }
 clientPlugin.apply(clientCtx)
-ok(registrations.map(r => r.slotName).join(',') === 'conversation.view,settings.section', '两个 slot 已注册(主区 Tab/设置页)')
+ok(registrations.map(r => r.slotName).join(',') === 'conversation.view,conversation.session.header.utilities,settings.section', 'View、会话 Header utility 和设置 slot 已注册')
+const labeled = registrations.filter(r => r.reg.label !== undefined)
+ok(labeled.length === 2 && labeled.every(r => typeof r.reg.label === 'function' && typeof r.reg.label() === 'string'), 'Slot label 使用字符串 thunk')
+ok(registrations.some(r => r.reg.id === 'netshell-session-count'), '动态会话计数迁移到 Header utility')
 ok(insertedStyles.length === 1 && insertedStyles[0].textContent.includes('.nsh-root'), '样式已注入')
+ok(clientFetches.includes('custom/rpc'), 'Client 使用 boot injection 的自定义 document-relative RPC 路径')
+ok(readFileSync(join(root, 'lib/client.js'), 'utf8').includes('if (!res.ok)'), 'Client 检查 RPC HTTP 错误状态')
 
 // 清理:客户端 150ms 轮询 interval 的 disposer 生效(进程可退出)
 for (const dispose of clientEffects) dispose()
