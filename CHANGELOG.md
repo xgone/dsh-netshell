@@ -6,6 +6,15 @@
 
 后续未发布变更将在此处记录。
 
+## [0.6.2] - 2026-10-24
+
+### 兼容性
+
+- 适配 DSH 0.2.1 Web/Desktop profile，更新 `@deepseek-ai/dsh-tools` 与 DSH peer 版本范围。
+- 自定义 RPC 路径同步到 Client，认证拒绝先经过 `connection.admit`，Client 正确处理 HTTP 错误。
+- 适配异步 SSH PTY 的写入与终止生命周期，避免输入乱序和会话清理竞态。
+- 修复密码认证 askpass、旧服务器档案、终端类型和 Client Slot label 兼容问题。
+
 ## [0.6.1] - 2026-09-07
 
 ### 新增
