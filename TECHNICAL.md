@@ -97,7 +97,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 注意:
 
 - `netshell.poll` 目前是全量快照:`output` 为缓冲全文,`nextCursor` 恒为 `0`、`lossy` 恒为 `false`——增量游标是**预留字段**,未实现;
-- Client 以 **80ms** 固定间隔轮询:`discoverSessions`(发现外部 / 模型开的会话与 pending,必要时自动弹出面板)+ `pollOne(activeId)`(仅当前会话);同一会话的 poll 请求串行化,输入 RPC 完成后额外触发一次即时 poll。
+- Client 采用**自适应轮询**(取代旧的 80ms 固定全局 interval):有会话时 80ms 拉当前会话快照(`pollOne(activeId)`)+ 约 1s 刷新会话列表(`discoverSessions`);**无任何会话时降为约 5s 探测一次**;页面隐藏(`document.visibilityState === 'hidden'`)时暂停全部轮询;打开终端视图或页面重新可见时立即补拉。列表请求串行化(在途未返回则跳过本轮),输入 RPC 完成后额外触发一次即时 poll。旧行为是插件一加载就每 80ms 发一次 `sessions.list`(12.5 次/秒、约 750 次/分钟),即使未连接任何主机 —— 这是本版修复的 RPC 放大问题。
 
 ## 6. Guard 引擎(Host 侧)
 
