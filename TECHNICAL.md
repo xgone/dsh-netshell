@@ -214,7 +214,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 ## 9. Client 实现速览
 
 - **状态**:`store` 为手写 observable(`set()` 浅拷贝 + 订阅通知),另有 `screens: Map<sessionId, screen>` 保存每个会话的渲染状态;组件经 `useStore()` 订阅强刷(整树 re-render,当前规模可接受)。
-- **ANSI 渲染**(`lineSpans`):逐单元格缓冲(字符 + 样式),处理 SGR(16 色 FG/BG + 粗体/斜体/下划线/删除线/暗淡)、`K`/`J` 清行清屏、`C`/`D`/`G` 光标列移动、`\r` 回车重绘(进度条正确)、`\b`、`\t`(8 列制表)、BEL;剥除 OSC 与无显示意义控制符;相邻同样式合并为 span。无 xterm.js,这是精简自绘实现,完整光标重放(全屏 TUI)不支持。
+- **ANSI 渲染**(`lineSpans`):逐单元格缓冲(字符 + 样式),处理 SGR(16 色 FG/BG + 粗体/斜体/下划线/删除线/暗淡)、`K`/`J` 清行清屏、`P`/`@`/`X` 字符删除/插入/擦除、`C`/`D`/`G`/`H`/`f` 光标定位与列移动、`s`/`u` 及 ESC 7/8 光标保存/恢复、`\r` 回车重绘、`\b`、`\t`(8 列制表)、BEL;剥除 OSC 与无显示意义控制符;相邻同样式合并为 span。无 xterm.js,这是精简自绘实现,完整光标重放(全屏 TUI)不支持。
 - **按键映射**(`keyToData`):DOM 键盘事件 → 终端字节流;Ctrl+字母 → `\x01`..`\x1a`,方向键 / Home / End / PgUp / PgDn → CSI 序列,Tab/Shift-Tab → `\t` / `\x1b[Z`;Alt / Meta 组合忽略;命中即 `preventDefault` 并 `netshell.input` 转发。
 - **样式**:CSS 模板串经 `styles.insert` 一次性注入;颜色全部走 `--dsw-*` 设计令牌(`TK` 映射表),自动适配深浅主题。
 
