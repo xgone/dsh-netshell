@@ -5,8 +5,8 @@
 ## DSH 兼容性说明
 
 - 当前分支面向 DSH `0.2.1` Web profile；本地兼容性审查基于上游 `dsh-v0.2.1-rc.2`，旧版 DSH 不在支持范围内。`@deepseek-ai/dsh-tools` 由 DSH 宿主提供并作为可选 peer 声明，不要把它作为 profile 运行时依赖单独安装；静态插件会从 DSH host entry 加载宿主版本，避免 hoisted profile 中的副本遮蔽兼容版本。
-- 本地终端命令应使用 DSH 内置本地终端工具，不要通过 `netshell_run` 执行；NetShell 的模型工具只用于用户明确指定的远程服务器。
-- 远程 SSH 辅助脚本当前仅支持 POSIX 运行环境；Windows 设备上的本地终端仍可用，远程请求会安全拒绝并提示使用内置本地终端。
+- 本地终端命令应使用 DSH 内置本地终端工具，不要通过 `netshell_run` 执行；NetShell 的模型工具只用于用户明确指定的远程服务器。Windows 本地终端优先选择 PowerShell/pwsh/cmd，避免把 `bash.exe` 的 WSL 启动器误当作可用 Bash。
+- 远程 SSH 支持 Windows 10/11 的 OpenSSH Client；Windows 密码自动注入要求支持 `SSH_ASKPASS_REQUIRE=force` 的 OpenSSH（建议 8.7+）。
 
 ## 0.6.4 · 2026-10-30
 

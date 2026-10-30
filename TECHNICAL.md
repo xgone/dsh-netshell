@@ -54,13 +54,13 @@
 - 插件运行在 DSH 的 **node:vm 沙箱 realm**:没有 `require`,不能引第三方库——这是所有选型(包装 ssh 二进制、自绘 ANSI、手写 store)的根本原因。
 - **Host** 动态函数体声明 `inject: ['subprocess', 'credentials', 'timer', 'connection']`;静态 loader 另外注入 `tools` / `webServer`。`connection` 只用于 Web RPC 认证,自定义路由在读取请求体前必须 `admit`,用到:
   - `subprocess.spawnTerminal(spec)`:PTY 拉起交互式 `ssh`(会话);
-  - `subprocess.spawn(spec)`:askpass 脚本落盘 / 清理、`ssh -T` 一次性命令执行(工具路径);
+  - `subprocess.spawn(spec)`:跨平台 askpass helper 与私有 `known_hosts` 初始化/清理、`ssh -T` 一次性命令执行(工具路径);
   - `subprocess.resolveExecutable('ssh')`:定位 ssh 二进制;
   - `credentials.readRecord / modifyRecord / describe / resolve / set / unset`:档案与密码的持久化(§4);
   - `harness.handle(method, fn)`:注册 RPC;`harness.defineTool` + `harness.registerTool`:注册模型工具;
   - `timer.timeout / interval`:轮询与等待。
 - **Client** 可用:`React`(代码风格为 `var x = React.useState(...)` 解构前写法)、`host.call`、`styles.insert`、`ctx.get('slots')`、`ctx.get('locale')`、`console`;slots:`conversation.view`(主区域 Tab,list-kind,`data-conversation-composer-overlay` 定高模式)、`settings.section`(设置页)。
-- 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现;本地终端按 DSH 当前平台选择 shell,远程 SSH 辅助脚本当前仅支持 POSIX,Windows 远程请求会 fail-closed 并提示使用 DSH 内置本地终端。
+- 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现;本地终端按 DSH 平台选择 shell,Windows 优先 `pwsh` / `powershell` / `cmd` 以避开常见 WSL `bash.exe` 启动器;远程 SSH 使用平台对应工作目录和 helper,Windows 通过 Win32 OpenSSH + DSH ConPTY 连接。Windows 密码自动注入依赖支持 `SSH_ASKPASS_REQUIRE=force` 的 OpenSSH(建议 8.7+)。
 
 ## 4. 数据与持久化(为什么没有配置文件)
 
@@ -71,7 +71,7 @@
 | 服务器档案 + 等级 + 规则 | 凭据记录 `netshell/profiles`(常量 `PKEY`)| `kind: 'grant'`,payload `{ version: 1, servers: [...] }` |
 | 密码 | 每服务器一条,ref 由 `refFor(id)` 生成:`NETSHELL_PW_<id 去掉非字母数字后大写>` | `credentials.set(ref, password)` |
 | 运行时会话 | Host 进程内存 `Map` | 插件停止 / DSH 重启即清空(会话本就不跨进程) |
-| 主机指纹(known_hosts) | 插件私有文件 `~/.dsh/netshell/known_hosts` | 普通文件 0600 / 目录 0700,由 ssh 维护;0.1.1 起,与 `~/.ssh/known_hosts` 隔离 |
+| 主机指纹(known_hosts) | 插件私有文件 `$DSH_HOME/netshell/known_hosts`(未设置 DSH_HOME 时回退到 `~/.dsh`) | POSIX 普通文件 0600 / 目录 0700;Windows 继承用户 DSH 目录 ACL,由 ssh 维护;与 `~/.ssh/known_hosts` 隔离 |
 
 server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent', keyPath?, level: 'open'|'guarded'|'locked', rules: [{ pattern, action: 'allow'|'ask'|'deny', note? }], createdAt }`。
 
@@ -135,18 +135,18 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 ### 7.1 交互会话(`netshell.connect` → `spawnSession`)
 
 1. `resolveExecutable('ssh')` 定位二进制;
-2. `auth: 'password'` 时:`credentials.resolve(ref)` 取密码 → `makeAskpass` 写 askpass 脚本;
-3. `spawnTerminal` 拉起 `ssh -tt -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<私有文件> -o NumberOfPasswordPrompts=1 -o ServerAliveInterval=15 -o ConnectTimeout=12 …`(agent 加 `BatchMode=yes`;key 加 `-i <keyPath> -o IdentitiesOnly=yes`);
-   - **私有 known_hosts**(`knownHostsFile()`):首次调用经 `/bin/sh` 创建 `~/.dsh/netshell/known_hosts`(目录 0700、文件 0600,幂等)并缓存路径,失败可重试、失败则本次连接报错;插件学到的指纹不落入用户 `~/.ssh/known_hosts`,互不污染; BSD 工具链(macOS)的 `chmod` 不支持 `--` 分隔符,脚本里不要加;
+2. `auth: 'password'` 时:`credentials.resolve(ref)` 取密码 → `makeAskpass` 写 askpass helper;`auth: 'key'` 在 Windows 上先把原私钥复制到仅当前用户可访问 ACL 的临时目录,并以托管文件流复制,不继承 OneDrive/原目录 ACL;
+3. `spawnTerminal` 拉起 `ssh -tt -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<私有文件> -o NumberOfPasswordPrompts=1 -o ServerAliveInterval=15 -o ConnectTimeout=12 …`(agent 加 `BatchMode=yes`;key 加 `-i <keyPath 或临时受限副本> -o IdentitiesOnly=yes`);
+   - **私有 known_hosts**(`knownHostsFile()`):首次调用幂等创建 `$DSH_HOME/netshell/known_hosts`(未设置 `DSH_HOME` 时回退到 `~/.dsh/netshell`)并缓存路径;POSIX 设置目录 0700、文件 0600,Windows 用 PowerShell 创建于 DSH 用户目录(继承该目录 ACL);失败可重试,失败则本次连接报错;插件学到的指纹不落入用户 `~/.ssh/known_hosts`;
 4. 异步消费输出流写 `onOutput`(检测错误特征设置中文 `hint`);首个输出块即置 `status: 'live'`;
 5. 退出时 `onExit` 记录 `closedReason` 并删除 askpass 脚本。
 
-**askpass 机制**(密码认证,需 OpenSSH ≥ 8.4):
+**askpass 机制**(密码认证):
 
-- 脚本写到 `/tmp/.netshell-askpass-<nsToken>-<n>.sh`,内容仅 `printf "%s\n" "$NETSHELL_PW"`;
-- 用 `/bin/sh -c 'umask 077 && printf %s "$NS_SCRIPT" > "$1" && chmod 700 …'` 落盘(0700);
-- ssh 进程 env 注入 `SSH_ASKPASS=<脚本>` + `SSH_ASKPASS_REQUIRE=force` + `DISPLAY=netshell:0`(非空即可触发 askpass 路径)+ 密码本体 `NETSHELL_PW`;
-- 会话结束 `/bin/sh rm -f` 删除脚本。
+- POSIX 需要 OpenSSH ≥ 8.4;脚本写到 `/tmp/.netshell-askpass-<nsToken>-<n>.sh`,内容仅 `printf "%s\n" "$NETSHELL_PW"`,以 0700 权限落盘;
+- Windows 使用 `%TEMP%` 下的 `.cmd` helper 调用 Windows PowerShell 输出 `NETSHELL_PW`;helper 文件本身不含密码,由当前 Windows 用户的临时目录 ACL 保护;
+- 两个平台的 ssh 进程均设置 `SSH_ASKPASS`、`SSH_ASKPASS_REQUIRE=force`、`DISPLAY=netshell:0` 和 `NETSHELL_PW`;Windows 自动密码注入建议使用 Win32 OpenSSH ≥ 8.7;
+- 会话结束时通过对应平台的文件工具删除临时 helper。
 
 ### 7.2 缓冲策略
 
@@ -208,13 +208,13 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 - ask 的授权凭证机制性绑定真人操作:确认卡答案由宿主 `userQuestions.ask` 返回、面板裁决经 `netshell.decide` 记账,`choice` 参数不参与授权;
 - `netshell.input` 已做多字符防绕过(内嵌 `\r`/`\n` 拆段过 Guard),但 `\x15`/`\x7f` 等控制字符在行缓冲与远端 readline 间的语义差异理论上仍可构造出「Guard 看到的串 ≠ 远端执行的串」的混淆输入,归类为混淆变形类已知弱点;
 - `atPwPrompt` 是启发式:远端提示语不含 `password:` 时(如自定义 PAM 提示),密码回车可能落入评估路径,通常无副作用但会记一条历史;
-- host key 变更时由 ssh 自身拒绝连接(指纹记在私有 `~/.dsh/netshell/known_hosts`),`onOutput` 识别特征文案给出中文 hint 与善后指引;
+- host key 变更时由 ssh 自身拒绝连接(指纹记在私有 `$DSH_HOME/netshell/known_hosts`,未设置时回退 `~/.dsh/netshell`),`onOutput` 识别特征文案给出中文 hint 与善后指引;
 - 模型路径的 `waitLive` 是 120–150ms 轮询,非事件驱动(可接受,但不优雅)。
 
 ## 9. Client 实现速览
 
 - **状态**:`store` 为手写 observable(`set()` 浅拷贝 + 订阅通知),另有 `screens: Map<sessionId, screen>` 保存每个会话的渲染状态;组件经 `useStore()` 订阅强刷(整树 re-render,当前规模可接受)。
-- **ANSI 渲染**(`lineSpans`):逐单元格缓冲(字符 + 样式),处理 SGR(16 色 FG/BG + 粗体/斜体/下划线/删除线/暗淡)、`K`/`J` 清行清屏、`C`/`D`/`G` 光标列移动、`\r` 回车重绘(进度条正确)、`\b`、`\t`(8 列制表)、BEL;剥除 OSC 与无显示意义控制符;相邻同样式合并为 span。无 xterm.js,这是精简自绘实现,完整光标重放(全屏 TUI)不支持。
+- **ANSI 渲染**(`lineSpans`):逐单元格缓冲(字符 + 样式),处理 SGR(16 色 FG/BG + 粗体/斜体/下划线/删除线/暗淡)、`K`/`J` 清行清屏、`P`/`@`/`X` 字符删除/插入/擦除、`C`/`D`/`G`/`H`/`f` 光标定位与列移动、`s`/`u` 及 ESC 7/8 光标保存/恢复、`\r` 回车重绘、`\b`、`\t`(8 列制表)、BEL;剥除 OSC 与无显示意义控制符;相邻同样式合并为 span。无 xterm.js,这是精简自绘实现,完整光标重放(全屏 TUI)不支持。
 - **按键映射**(`keyToData`):DOM 键盘事件 → 终端字节流;Ctrl+字母 → `\x01`..`\x1a`,方向键 / Home / End / PgUp / PgDn → CSI 序列,Tab/Shift-Tab → `\t` / `\x1b[Z`;Alt / Meta 组合忽略;命中即 `preventDefault` 并 `netshell.input` 转发。
 - **样式**:CSS 模板串经 `styles.insert` 一次性注入;颜色全部走 `--dsw-*` 设计令牌(`TK` 映射表),自动适配深浅主题。
 
