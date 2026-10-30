@@ -93,6 +93,10 @@ const subprocess = {
   spawn: (spec) => {
     spawnSpecs.push(spec)
     if (spec.env && spec.env.NS_FILE) return sshOut('C:\\Users\\test\\AppData\\Local\\Temp\\' + spec.env.NS_FILE)
+    if (spec.env && spec.env.NS_KEY_DIR) {
+      const dir = 'C:\\Users\\test\\AppData\\Local\\Temp\\' + spec.env.NS_KEY_DIR
+      return sshOut(dir + '\\id_key.pem\r\n' + dir)
+    }
     if (terminalPlatform === 'windows' && spec.argv && String(spec.argv[0]).toLowerCase().includes('powershell') && String(spec.argv.at(-1)).includes('known_hosts')) {
       return sshOut('C:\\Users\\test\\.dsh\\netshell\\known_hosts')
     }
@@ -409,6 +413,27 @@ r = await run({ command: 'echo windows-password-auth' })
 const windowsToolSsh = spawnSpecs.slice(windowsToolStart).find((spec) => spec.argv && spec.argv[0] === 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' && spec.argv.includes('-T'))
 ok(r.ok === true && windowsToolSsh && windowsToolSsh.cwd === '.' && windowsToolSsh.env.SSH_ASKPASS.endsWith('.cmd') && windowsToolSsh.env.SSH_ASKPASS_REQUIRE === 'force' && windowsToolSsh.env.DISPLAY && windowsToolSsh.env.NETSHELL_PW === 'pw', 'D5: Windows netshell_run 使用密码 askpass 并完成一次性 SSH')
 await rpc('netshell.disconnect', { id: windowsRemote.id })
+record.payload.servers[0].auth = 'key'
+record.payload.servers[0].keyPath = 'D:\\OneDrive\\server\\ssl_key\\test.pem'
+const windowsKeyStart = spawnSpecs.length
+const windowsKeyRemote = await rpc('netshell.connect', { serverId: 'srv1' })
+const windowsKeyTerm = terminalSpecs.at(-1)
+const windowsKeyArg = windowsKeyTerm ? windowsKeyTerm.argv.indexOf('-i') : -1
+const windowsKeyCopy = spawnSpecs.slice(windowsKeyStart).find((spec) => spec.env && spec.env.NS_KEY_DIR)
+ok(!!windowsKeyRemote.id && windowsKeyArg >= 0 && windowsKeyTerm.argv[windowsKeyArg + 1].includes('\\netshell-key-') && !windowsKeyTerm.argv.includes(record.payload.servers[0].keyPath), 'D7: Windows ssh 只引用带受限 ACL 的临时密钥副本')
+ok(windowsKeyCopy && String(windowsKeyCopy.argv.at(-1)).includes('SetAccessRuleProtection') && String(windowsKeyCopy.argv.at(-1)).includes('CopyTo'), 'D7: Windows 密钥副本去掉继承 ACL 并按字节复制')
+const keySessionDone = terminalDoneResolvers.at(-1)
+keySessionDone({ exitCode: 0, signal: null })
+await sleep(5)
+ok(spawnSpecs.some((spec) => spec.env && spec.env.NS_DIR), 'D7: Windows 交互会话退出后清理临时密钥目录')
+await rpc('netshell.disconnect', { id: windowsKeyRemote.id })
+const windowsKeyToolStart = spawnSpecs.length
+r = await run({ command: 'echo windows-key-auth' })
+const windowsKeyTool = spawnSpecs.slice(windowsKeyToolStart).find((spec) => spec.argv && spec.argv[0] === 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' && spec.argv.includes('-T'))
+const windowsKeyToolArg = windowsKeyTool ? windowsKeyTool.argv.indexOf('-i') : -1
+ok(r.ok === true && windowsKeyToolArg >= 0 && windowsKeyTool.argv[windowsKeyToolArg + 1].includes('\\netshell-key-') && !windowsKeyTool.argv.includes(record.payload.servers[0].keyPath), 'D7: Windows netshell_run 也使用受限临时密钥副本')
+record.payload.servers[0].auth = 'agent'
+delete record.payload.servers[0].keyPath
 const windowsShellProbeStart = resolvedExecutables.length
 const windowsLocal = await rpc('netshell.local.connect', {})
 const windowsLocalSpec = terminalSpecs.at(-1)

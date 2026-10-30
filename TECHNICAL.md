@@ -135,8 +135,8 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 ### 7.1 交互会话(`netshell.connect` → `spawnSession`)
 
 1. `resolveExecutable('ssh')` 定位二进制;
-2. `auth: 'password'` 时:`credentials.resolve(ref)` 取密码 → `makeAskpass` 写 askpass 脚本;
-3. `spawnTerminal` 拉起 `ssh -tt -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<私有文件> -o NumberOfPasswordPrompts=1 -o ServerAliveInterval=15 -o ConnectTimeout=12 …`(agent 加 `BatchMode=yes`;key 加 `-i <keyPath> -o IdentitiesOnly=yes`);
+2. `auth: 'password'` 时:`credentials.resolve(ref)` 取密码 → `makeAskpass` 写 askpass helper;`auth: 'key'` 在 Windows 上先把原私钥复制到仅当前用户可访问 ACL 的临时目录,并以托管文件流复制,不继承 OneDrive/原目录 ACL;
+3. `spawnTerminal` 拉起 `ssh -tt -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<私有文件> -o NumberOfPasswordPrompts=1 -o ServerAliveInterval=15 -o ConnectTimeout=12 …`(agent 加 `BatchMode=yes`;key 加 `-i <keyPath 或临时受限副本> -o IdentitiesOnly=yes`);
    - **私有 known_hosts**(`knownHostsFile()`):首次调用幂等创建 `$DSH_HOME/netshell/known_hosts`(未设置 `DSH_HOME` 时回退到 `~/.dsh/netshell`)并缓存路径;POSIX 设置目录 0700、文件 0600,Windows 用 PowerShell 创建于 DSH 用户目录(继承该目录 ACL);失败可重试,失败则本次连接报错;插件学到的指纹不落入用户 `~/.ssh/known_hosts`;
 4. 异步消费输出流写 `onOutput`(检测错误特征设置中文 `hint`);首个输出块即置 `status: 'live'`;
 5. 退出时 `onExit` 记录 `closedReason` 并删除 askpass 脚本。

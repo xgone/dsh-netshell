@@ -62,7 +62,7 @@ The local terminal does not read remote profiles or SSH passwords.
 4. Choose a permission level; keep `guarded` for a first connection.
 5. Return to the **Terminal** tab and click **Connect** on the server row.
 
-A saved password is shown only as configured status and is never displayed again.
+A saved password is shown only as configured status and is never displayed again. On Windows, private-key auth uses a temporary copy protected by the current user's ACL; it is removed after the session, and the original key file and its ACL are left unchanged.
 
 ### Risky commands
 

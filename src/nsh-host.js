@@ -213,16 +213,24 @@ return {
     }
 
     function cleanupAskpass(s) {
-      if (!s || !s.askpassPath) return
-      var path = s.askpassPath
+      if (!s) return
+      var askpassPath = s.askpassPath
+      var keyCopyPath = s.keyCopyPath
       s.askpassPath = null
+      s.keyCopyPath = null
       if (s.platform === 'windows') {
-        ignoreAsync(runWindowsPowerShell('Remove-Item -LiteralPath $env:NS_FILE -Force -ErrorAction SilentlyContinue', { NS_FILE: path }))
+        if (askpassPath) ignoreAsync(runWindowsPowerShell('Remove-Item -LiteralPath $env:NS_FILE -Force -ErrorAction SilentlyContinue', { NS_FILE: askpassPath }))
+        if (s.keyCopyDir) ignoreAsync(runWindowsPowerShell('Remove-Item -LiteralPath $env:NS_DIR -Recurse -Force -ErrorAction SilentlyContinue', { NS_DIR: s.keyCopyDir }))
+        else if (keyCopyPath) ignoreAsync(runWindowsPowerShell('Remove-Item -LiteralPath $env:NS_FILE -Force -ErrorAction SilentlyContinue', { NS_FILE: keyCopyPath }))
         return
       }
+      var paths = []
+      if (askpassPath) paths.push(askpassPath)
+      if (keyCopyPath) paths.push(keyCopyPath)
+      if (paths.length === 0) return
       try {
         var cleanup = subprocess.spawn({
-          argv: ['/bin/sh', '-c', 'rm -f -- "$1"', 'sh', path],
+          argv: ['/bin/sh', '-c', 'rm -f -- "$1"', 'sh', paths[0]],
           cwd: '/tmp',
           stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 }, stderr: { maxBytes: 1024 } },
           graceMs: 3000
@@ -559,7 +567,7 @@ return {
 function runWindowsPowerShell(command, env) {
       return subprocess.resolveExecutable('powershell.exe').then(function (powershellPath) {
         var h = subprocess.spawn({
-          argv: [powershellPath, '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); ' + command],
+          argv: [powershellPath, '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ' + command],
           cwd: '.',
           env: env || {},
           stdio: { stdin: 'ignore', stdout: { maxBytes: 4096 }, stderr: { maxBytes: 4096 } },
@@ -576,6 +584,34 @@ function runWindowsPowerShell(command, env) {
       })
     }
 
+    function preparePrivateKey(s, sourcePath) {
+      if (!sourcePath) return Promise.reject(new Error('私钥认证需要填写私钥路径'))
+      if (s.platform !== 'windows') return Promise.resolve(sourcePath)
+      nonce += 1
+      var directoryName = 'netshell-key-' + nsToken + '-' + nonce
+      var command = "$ErrorActionPreference = 'Stop'; $source = $env:NS_KEY_SOURCE; $directory = Join-Path $env:TEMP $env:NS_KEY_DIR; try { " +
+        "if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw 'Private key file not found' }; " +
+        "$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User; " +
+        "$directoryAcl = [System.Security.AccessControl.DirectorySecurity]::new(); $directoryAcl.SetAccessRuleProtection($true, $false); $directoryAcl.SetOwner($sid); " +
+        "$directoryRule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, [System.Security.AccessControl.FileSystemRights]::FullControl, ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit), [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow); [void]$directoryAcl.AddAccessRule($directoryRule); " +
+        "[void][System.IO.Directory]::CreateDirectory($directory, $directoryAcl); $destination = Join-Path $directory 'id_key.pem'; " +
+        "$sourceStream = [System.IO.File]::Open($source, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read); " +
+        "try { $destinationStream = [System.IO.File]::Open($destination, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None); " +
+        "try { $sourceStream.CopyTo($destinationStream); $destinationStream.Flush($true) } finally { $destinationStream.Dispose() } } finally { $sourceStream.Dispose() }; " +
+        "$fileAcl = Get-Acl -LiteralPath $destination; $fileAcl.SetAccessRuleProtection($true, $false); foreach ($ace in @($fileAcl.Access)) { [void]$fileAcl.RemoveAccessRuleSpecific($ace) }; $fileAcl.SetOwner($sid); " +
+        "$userRule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, [System.Security.AccessControl.FileSystemRights]::FullControl, [System.Security.AccessControl.AccessControlType]::Allow); [void]$fileAcl.AddAccessRule($userRule); Set-Acl -LiteralPath $destination -AclObject $fileAcl; " +
+        "Write-Output $destination; Write-Output $directory } catch { Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue; throw }"
+      return runWindowsPowerShell(command, { NS_KEY_SOURCE: sourcePath, NS_KEY_DIR: directoryName }).then(function (paths) {
+        var parts = paths.split(/\r?\n/)
+        var copyPath = parts[0]
+        var copyDirectory = parts[1]
+        if (!copyPath || !copyDirectory) throw new Error('无法创建权限受限的 Windows 私钥副本')
+        s.keyCopyPath = copyPath
+        s.keyCopyDir = copyDirectory
+        return copyPath
+      })
+    }
+
     function makeAskpass(s) {
       nonce += 1
       if (s.platform === 'windows') {
@@ -583,7 +619,7 @@ function runWindowsPowerShell(command, env) {
         var CRLF = String.fromCharCode(13) + String.fromCharCode(10)
         var quote = String.fromCharCode(39)
         var windowsScript = '@echo off' + CRLF +
-          '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); [Console]::WriteLine([Environment]::GetEnvironmentVariable(' + quote + 'NETSHELL_PW' + quote + '))"' + CRLF
+          '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); [Console]::WriteLine([Environment]::GetEnvironmentVariable(' + quote + 'NETSHELL_PW' + quote + '))"' + CRLF
         var writeCommand = "$ErrorActionPreference = 'Stop'; $path = Join-Path $env:TEMP $env:NS_FILE; [System.IO.File]::WriteAllText($path, $env:NS_SCRIPT); Write-Output $path"
         return runWindowsPowerShell(writeCommand, { NS_FILE: windowsFileName, NS_SCRIPT: windowsScript }).then(function (dest) {
           if (!dest) throw new Error('创建 Windows askpass 辅助脚本失败:未返回文件路径')
@@ -771,7 +807,7 @@ function runWindowsPowerShell(command, env) {
             id: 'ns' + Date.now().toString(36) + (++nonce),
             server: server, platform: platform, status: 'connecting', outAll: '', outBase: 0, dropped: 0,
             events: [], evSeq: 0, line: '', hist: [], histIdx: undefined,
-            pending: null, tail: '', atPwPrompt: false, hint: null, closedReason: null, askpassPath: null
+            pending: null, tail: '', atPwPrompt: false, hint: null, closedReason: null, askpassPath: null, keyCopyPath: null
           }
           var envJob = Promise.resolve(null)
           if (server.auth === 'password') {
@@ -780,9 +816,11 @@ function runWindowsPowerShell(command, env) {
               return rc.value
             })
           }
-          return Promise.all([envJob, knownHostsFile(platform)]).then(function (rs) {
+          var keyJob = server.auth === 'key' ? preparePrivateKey(s, server.keyPath) : Promise.resolve(null)
+          return Promise.all([envJob, knownHostsFile(platform), keyJob]).then(function (rs) {
             var pw = rs[0]
             var khFile = rs[1]
+            var keyPath = rs[2]
             var askpassJob = server.auth === 'password' ? makeAskpass(s) : Promise.resolve(null)
             return askpassJob.then(function () {
               var argv = [sshPath, '-tt',
@@ -792,10 +830,7 @@ function runWindowsPowerShell(command, env) {
                 '-o', 'ServerAliveInterval=15',
                 '-o', 'ConnectTimeout=12']
               if (server.auth === 'agent') argv.push('-o', 'BatchMode=yes')
-              if (server.auth === 'key') {
-                if (!server.keyPath) return Promise.reject(new Error('私钥认证需要填写私钥路径'))
-                argv.push('-i', server.keyPath, '-o', 'IdentitiesOnly=yes')
-              }
+              if (server.auth === 'key') argv.push('-i', keyPath, '-o', 'IdentitiesOnly=yes')
               argv.push('-p', String(server.port || 22), server.user + '@' + server.host)
               var env = { TERM: 'xterm-256color', DISPLAY: 'netshell:0' }
               if (server.auth === 'password') {
@@ -820,6 +855,9 @@ function runWindowsPowerShell(command, env) {
                 return s
               })
             })
+          }).catch(function (error) {
+            cleanupAskpass(s)
+            throw error
           })
         })
       })
@@ -1062,12 +1100,14 @@ function runWindowsPowerShell(command, env) {
         })
         : Promise.resolve(null)
       return remotePlatform().then(function (platform) {
-        return Promise.all([subprocess.resolveExecutable('ssh'), knownHostsFile(platform), passwordJob]).then(function (rs) {
+        var authFiles = { askpassPath: null, keyCopyPath: null, platform: platform }
+        var keyJob = server.auth === 'key' ? preparePrivateKey(authFiles, server.keyPath) : Promise.resolve(null)
+        return Promise.all([subprocess.resolveExecutable('ssh'), knownHostsFile(platform), passwordJob, keyJob]).then(function (rs) {
           var sshPath = rs[0]
           var khFile = rs[1]
           var password = rs[2]
-          var askpass = { askpassPath: null, platform: platform }
-          var askpassJob = server.auth === 'password' ? makeAskpass(askpass) : Promise.resolve(null)
+          var keyPath = rs[3]
+          var askpassJob = server.auth === 'password' ? makeAskpass(authFiles) : Promise.resolve(null)
           return askpassJob.then(function () {
             var argv = [sshPath, '-T',
               '-o', 'StrictHostKeyChecking=accept-new',
@@ -1075,14 +1115,11 @@ function runWindowsPowerShell(command, env) {
               '-o', 'NumberOfPasswordPrompts=1',
               '-o', 'ConnectTimeout=12']
             if (server.auth === 'agent') argv.push('-o', 'BatchMode=yes')
-            if (server.auth === 'key') {
-              if (!server.keyPath) return Promise.reject(new Error('私钥认证需要填写私钥路径'))
-              argv.push('-i', server.keyPath, '-o', 'IdentitiesOnly=yes')
-            }
+            if (server.auth === 'key') argv.push('-i', keyPath, '-o', 'IdentitiesOnly=yes')
             argv.push('-p', String(server.port || 22), server.user + '@' + server.host, cmd)
             var env = {}
             if (server.auth === 'password') {
-              env.SSH_ASKPASS = askpass.askpassPath
+              env.SSH_ASKPASS = authFiles.askpassPath
               env.SSH_ASKPASS_REQUIRE = 'force'
               env.DISPLAY = 'netshell:0'
               env.NETSHELL_PW = password
@@ -1100,13 +1137,16 @@ function runWindowsPowerShell(command, env) {
               var stderr = handle.collected && handle.collected.stderr ? handle.collected.stderr.readFrom(0).text : ''
               return { code: out.exitCode, stdout: stdout, stderr: stderr }
             }).then(function (value) {
-              cleanupAskpass(askpass)
+              cleanupAskpass(authFiles)
               return value
             }, function (error) {
-              cleanupAskpass(askpass)
+              cleanupAskpass(authFiles)
               throw error
             })
           })
+        }).catch(function (error) {
+          cleanupAskpass(authFiles)
+          throw error
         })
       })
     }

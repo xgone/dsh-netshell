@@ -9,6 +9,7 @@
 - **支持 Windows 上的远程 SSH**：使用 Windows OpenSSH 客户端和 DSH ConPTY 启动远程终端；改用 PowerShell 创建私有 `known_hosts` 与临时 askpass helper，不再因平台为 Windows 而拒绝连接。
 - **修复 Windows 本地终端误启 WSL Bash**：Windows 默认优先选择 PowerShell/pwsh/cmd，避免 PATH 中 `bash.exe` 指向故障的 WSL launcher。
 - **修复 PowerShell 命令回显残留字符**：ANSI 渲染器现在处理 CSI 插入/删除/擦除字符及光标保存/恢复控制，避免 PSReadLine 重绘后留下旧字符。
+- **修复 Windows 私钥权限过宽导致 OpenSSH 忽略密钥**：连接时将密钥内容复制到仅当前用户可访问 ACL 的临时目录，结束后清理副本，不修改原文件或 OneDrive ACL。
 
 ## [0.6.4] - 2026-10-30
 

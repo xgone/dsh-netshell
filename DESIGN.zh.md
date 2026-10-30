@@ -38,7 +38,7 @@ Host 端 Builtins 只有 `ctx / harness / console / btoa / atob / TextEncoder / 
 
 - 用宿主 `subprocess.spawnTerminal(spec)` 经 PTY 拉起本地 `ssh`(`-tt` 强制远端伪终端);Windows 使用 DSH 提供的 ConPTY;
 - **密码注入**:`SSH_ASKPASS` 指向插件生成的临时 helper(运行时才从 `credentials.resolve(ref)` 取密码输出),并设置 `SSH_ASKPASS_REQUIRE=force` 与非空 `DISPLAY`;POSIX 生成受限权限的 shell 脚本,Windows 生成不含密码的 `.cmd` helper 调用 PowerShell(Win32 OpenSSH 8.7+);
-- 密钥认证直接传 `-i <keyPath>`,agent 认证走本机 ssh-agent,均无需 askpass;
+- 密钥认证传 `-i <keyPath>`;Windows 先复制到仅当前用户可访问 ACL 的临时文件以满足 Win32 OpenSSH 权限检查,连接结束清理,不改原文件 ACL;agent 认证走本机 ssh-agent,均无需密码 askpass;
 - `StrictHostKeyChecking=accept-new` + 插件私有 `known_hosts` 文件,不污染用户配置;POSIX 设置 0700/0600 权限,Windows 使用用户 DSH 目录的继承 ACL。
 
 ### 2.2 为什么不注册 `terminals.registerBackend`
