@@ -22,7 +22,7 @@ DSH-NetShell lets you manage servers, use a live terminal, and keep a clear huma
 | Capability | What you get |
 | --- | --- |
 | Local terminal | Start `bash`, `sh`, PowerShell, or `cmd` on the current device without SSH setup |
-| Remote SSH | Manage hosts, ports, users, and authentication with multiple sessions |
+| Remote SSH | Manage hosts, ports, users, and authentication with multiple sessions; supports Windows OpenSSH Client |
 | Command guard | `allow` runs immediately, `ask` waits for approval, `deny` blocks |
 | Visible execution | Human input and AI commands appear in the same live terminal panel |
 | Credential isolation | SSH passwords stay in DSH's encrypted store and never enter AI messages, tool results, or logs |
@@ -42,7 +42,7 @@ From a local checkout:
 dsh plugin --profile web add link:/path/to/dsh-netshell
 ```
 
-Restart DSH Web after installation, then open **Settings → Terminal**.
+On Windows, install/enable the Windows OpenSSH Client (`ssh -V` checks availability); saved-password automation requires `SSH_ASKPASS_REQUIRE=force` support (OpenSSH 8.7+ recommended). Restart DSH Web after installation, then open **Settings → Terminal**.
 
 ## Quickstart
 
@@ -99,7 +99,7 @@ On the first use of a server by a model session, or after the user manually disc
 
 This is an operation guard, not a complete security sandbox. It protects commands entering through this plugin's terminal and `netshell_run`; SSH connections created by other plugins or generic shell tools are outside its scope. Use `locked` for sensitive environments and review actions inside interactive programs carefully.
 
-SSH host keys are stored in the plugin-private `~/.dsh/netshell/known_hosts`, separate from the user's `~/.ssh/known_hosts`.
+SSH host keys are stored in the plugin-private `$DSH_HOME/netshell/known_hosts` (falling back to `~/.dsh/netshell` when `DSH_HOME` is unset), separate from the user's `~/.ssh/known_hosts`.
 
 ## Documentation
 

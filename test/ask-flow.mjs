@@ -65,7 +65,9 @@ const timer = {
   interval: () => () => {},
 }
 const subprocess = {
-  resolveExecutable: async () => '/usr/bin/ssh',
+  resolveExecutable: async (name) => terminalPlatform === 'windows'
+    ? (name === 'powershell.exe' ? 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' : 'C:\\Windows\\System32\\OpenSSH\\ssh.exe')
+    : '/usr/bin/ssh',
   terminalEnvironment: async () => ({ platform: terminalPlatform }),
   spawnTerminal: async (spec) => {
     terminalSpecs.push(spec)
@@ -81,7 +83,14 @@ const subprocess = {
       done,
     }
   },
-  spawn: (spec) => { spawnSpecs.push(spec); return sshOut('ok-output') },
+  spawn: (spec) => {
+    spawnSpecs.push(spec)
+    if (spec.env && spec.env.NS_FILE) return sshOut('C:\\Users\\test\\AppData\\Local\\Temp\\' + spec.env.NS_FILE)
+    if (terminalPlatform === 'windows' && spec.argv && String(spec.argv[0]).toLowerCase().includes('powershell') && String(spec.argv.at(-1)).includes('known_hosts')) {
+      return sshOut('C:\\Users\\test\\.dsh\\netshell\\known_hosts')
+    }
+    return sshOut('ok-output')
+  },
 }
 
 // userQuestions 桩:验证插件的调用形态并按 mode 决定回答/拒绝
@@ -377,9 +386,23 @@ const local = await rpc('netshell.local.connect', {})
 ok(terminalSpecs.at(-1) && terminalSpecs.at(-1).terminalType === 'xterm-256color', 'D4: 本地终端声明 terminalType')
 await rpc('netshell.disconnect', { id: local.id })
 
+await rpc('netshell.disconnect', { id: conn.id })
 terminalPlatform = 'windows'
+record.payload.servers[0].auth = 'password'
+const windowsSpawnStart = spawnSpecs.length
 const windowsRemote = await rpc('netshell.connect', { serverId: 'srv1' })
-ok(String(windowsRemote.error).includes('POSIX'), 'D5: Windows 远程 SSH fail-closed')
+const windowsTerm = terminalSpecs.at(-1)
+const windowsAskpassCreate = spawnSpecs.slice(windowsSpawnStart).find((spec) => spec.env && spec.env.NS_SCRIPT)
+ok(!!windowsRemote.id && !windowsRemote.error, 'D5: Windows OpenSSH 交互终端可以启动')
+ok(windowsTerm && windowsTerm.cwd === '.' && windowsTerm.argv[0] === 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' && windowsTerm.env.SSH_ASKPASS.endsWith('.cmd') && windowsTerm.env.NETSHELL_PW === 'pw', 'D5: Windows 使用 ssh.exe、ConPTY 和密码 askpass')
+ok(windowsAskpassCreate && windowsAskpassCreate.env.NS_FILE.endsWith('.cmd') && windowsAskpassCreate.env.NS_SCRIPT.includes('NETSHELL_PW') && !windowsAskpassCreate.env.NS_SCRIPT.includes('pw'), 'D5: Windows askpass helper 从进程环境读取密码而不落盘')
+ok(!spawnSpecs.slice(windowsSpawnStart).some((spec) => spec.argv && spec.argv[0] === '/bin/sh'), 'D5: Windows 文件辅助操作不调用 POSIX shell')
+const windowsToolStart = spawnSpecs.length
+r = await run({ command: 'echo windows-password-auth' })
+const windowsToolSsh = spawnSpecs.slice(windowsToolStart).find((spec) => spec.argv && spec.argv[0] === 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' && spec.argv.includes('-T'))
+ok(r.ok === true && windowsToolSsh && windowsToolSsh.cwd === '.' && windowsToolSsh.env.SSH_ASKPASS.endsWith('.cmd') && windowsToolSsh.env.SSH_ASKPASS_REQUIRE === 'force' && windowsToolSsh.env.DISPLAY && windowsToolSsh.env.NETSHELL_PW === 'pw', 'D5: Windows netshell_run 使用密码 askpass 并完成一次性 SSH')
+await rpc('netshell.disconnect', { id: windowsRemote.id })
+record.payload.servers[0].auth = 'agent'
 terminalPlatform = 'posix'
 
 console.log(fail === 0 ? 'ASK-FLOW-OK' : `ASK-FLOW-FAILED (${fail} failures)`)

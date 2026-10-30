@@ -36,10 +36,10 @@
 
 Host 端 Builtins 只有 `ctx / harness / console / btoa / atob / TextEncoder / TextDecoder`,**没有 `require`**,无法引入 ssh2 库。因此:
 
-- 用宿主 `subprocess.spawnTerminal(spec)` 经 PTY 拉起本地 `ssh`(`-tt` 强制伪终端);
-- **密码注入**:`SSH_ASKPASS` 指向插件生成的临时 askpass 脚本(脚本执行时才从 `credentials.resolve(ref)` 取密码打印到 stdout),`SSH_ASKPASS_REQUIRE=force` + `DISPLAY=dummy`,配合 `setsid` 脱离 tty 触发 askpass 路径;需 OpenSSH ≥ 8.4(macOS 自带版本满足);
-- 密钥认证直接传 `-i <keyPath>`,agent 认证走本机 ssh-agent,均无需注入;
-- `StrictHostKeyChecking=accept-new` + 插件私有 `known_hosts` 文件(如 `~/.dsh/netshell/known_hosts`),不污染用户配置。
+- 用宿主 `subprocess.spawnTerminal(spec)` 经 PTY 拉起本地 `ssh`(`-tt` 强制远端伪终端);Windows 使用 DSH 提供的 ConPTY;
+- **密码注入**:`SSH_ASKPASS` 指向插件生成的临时 helper(运行时才从 `credentials.resolve(ref)` 取密码输出),并设置 `SSH_ASKPASS_REQUIRE=force` 与非空 `DISPLAY`;POSIX 生成受限权限的 shell 脚本,Windows 生成不含密码的 `.cmd` helper 调用 PowerShell(Win32 OpenSSH 8.7+);
+- 密钥认证直接传 `-i <keyPath>`,agent 认证走本机 ssh-agent,均无需 askpass;
+- `StrictHostKeyChecking=accept-new` + 插件私有 `known_hosts` 文件,不污染用户配置;POSIX 设置 0700/0600 权限,Windows 使用用户 DSH 目录的继承 ACL。
 
 ### 2.2 为什么不注册 `terminals.registerBackend`
 
@@ -73,7 +73,7 @@ Host 端 Builtins 只有 `ctx / harness / console / btoa / atob / TextEncoder / 
 ### 3.2 密码(凭据)
 
 - 存储:宿主 `credentials` 服务的 record 空间(`modifyRecord` / `deleteRecord`),ref 形如 `netshell/ssh/<serverId>`;加密与落盘(0600)由宿主凭据后端负责(`~/.dsh/.credentials.yaml`);
-- 使用:仅 Host 半区在**建立连接的瞬间** `resolve(ref)` 取值写入 askpass 脚本(0700,临时目录,连接建立后立即删除);
+- 使用:仅 Host 半区在**建立连接的瞬间** `resolve(ref)` 取值并传入 SSH 子进程环境,临时 askpass helper 不包含密码且连接结束立即删除;POSIX helper 为 0700 shell 脚本,Windows helper 是 `.cmd` 并从进程环境读取密码;
 - 隔离保证:
   - RPC 面(`host.call`)任何方法都不返回密码值,设置页也只显示"已设置/未设置";
   - 密码不进入任何模型消息、session log、终端输出流;
