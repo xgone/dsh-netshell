@@ -40,7 +40,7 @@
 | 动态沙箱 builtin | 静态模式落点(lib/index.js / lib/client.js) |
 |------|------|
 | `harness.handle(method, fn)` | 内存 handler 表 + 单一 `POST /netshell/rpc` JSON 分发(webServer 路由,先过 `connection.admit`) |
-| `harness.defineTool(def)` | `@deepseek-ai/dsh-tools` 的 `defineTool`(参数 schema 归一化) |
+| `harness.defineTool(def)` | 从 DSH host entry 解析宿主提供的 `@deepseek-ai/dsh-tools` 并调用 `defineTool`(参数 schema 归一化);将其作为 profile dependency 安装会因 hoisting 遮蔽兼容的宿主版本 |
 | `harness.registerTool(ctx, t)` | `ctx.tools.register(t)` |
 | 客户端 `host.call(method, args)` | `fetch('netshell/rpc')`(document-relative,支持挂载前缀;与宿主同一分发端点) |
 | 客户端 `styles.insert(css)` | `<style>` 注入 `document.head` |

@@ -26,6 +26,10 @@ function ok(condition, label) {
   if (!condition) { console.error('FAIL: ' + label); process.exitCode = 1 } else { passed++; console.log('ok: ' + label) }
 }
 
+const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+ok(!manifest.dependencies?.['@deepseek-ai/dsh-tools'], 'dsh-tools 不作为 profile runtime dependency 安装')
+ok(manifest.peerDependencies?.['@deepseek-ai/dsh-tools'] && manifest.peerDependenciesMeta?.['@deepseek-ai/dsh-tools']?.optional === true, 'dsh-tools 声明为 optional peer')
+
 // ── 宿主半区:装配 + RPC 路由挂到真实 http server ─────────────────────────
 const host = await import(pathToFileURL(join(root, 'lib/index.js')).href)
 ok(host.name === 'netshell', '宿主导出 name=netshell')
