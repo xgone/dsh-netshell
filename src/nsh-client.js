@@ -327,7 +327,7 @@ var COPY = {
     omitted: '… 已省略较早的 ', lines: ' 行输出', dangerPending: '⚠ 危险命令待确认', matchedRule: '匹配规则:', lockedRule: 'locked 模式白名单外', blockedWaiting: ' · 已拦截,等待你的决定',
     once: '执行一次', always: '永久放行该命令', deny: '拒绝', exec: '执行', blocked: '拦截', allowed: '放行', closed: '退出',
     termTheme: '终端配色:深色 / 浅色', dark: '深色', light: '浅色', historyEmpty: '本会话还没有命令记录', noCommand: '暂无命令', collapseHistory: '收起历史', history: '历史',
-    connect: '连接', connecting: '连接中…', sessions: '会话', servers: '服务器', noSessions: '暂无会话', noProfiles: '暂无档案', archivePath: '档案管理:设置 → ',
+    connect: '连接', connecting: '连接中…', sessions: '会话', terminalCount: '终端', servers: '服务器', noSessions: '暂无会话', noProfiles: '暂无档案', archivePath: '档案管理:设置 → ',
     connectFailed: '连接失败:', selectServer: '从左侧选择一个服务器开始远程会话', noProfile: '还没有服务器档案 — 在「设置 → ', closeRemove: '关闭并移除',
     rename: '重命名', remove: '移除', disconnectRemove: '断开并移除', pending: '待确认',
     ruleExamples: '示例:', serverRules: '服务器规则', ruleHint: '按顺序匹配 · 优先于内置规则库 · 只约束 AI 执行的命令',
@@ -345,7 +345,7 @@ var COPY = {
     omitted: '… Earlier ', lines: ' lines omitted', dangerPending: '⚠ Dangerous command pending', matchedRule: 'Matched rule:', lockedRule: 'locked mode: command is not allowlisted', blockedWaiting: ' · blocked, waiting for your decision',
     once: 'Run once', always: 'Always allow this command', deny: 'Deny', exec: 'Run', blocked: 'Blocked', allowed: 'Allowed', closed: 'Exit',
     termTheme: 'Terminal theme: dark / light', dark: 'Dark', light: 'Light', historyEmpty: 'No command history in this session', noCommand: 'No command', collapseHistory: 'Hide history', history: 'History',
-    connect: 'Connect', connecting: 'Connecting…', sessions: 'Sessions', servers: 'Servers', noSessions: 'No sessions', noProfiles: 'No profiles', archivePath: 'Profiles: Settings → ',
+    connect: 'Connect', connecting: 'Connecting…', sessions: 'Sessions', terminalCount: 'Terminals', servers: 'Servers', noSessions: 'No sessions', noProfiles: 'No profiles', archivePath: 'Profiles: Settings → ',
     connectFailed: 'Connection failed:', selectServer: 'Select a server from the left to start a remote session', noProfile: 'No server profile yet — add one in Settings → ', closeRemove: 'Close and remove',
     rename: 'Rename', remove: 'Remove', disconnectRemove: 'Disconnect and remove', pending: 'Pending',
     ruleExamples: 'Examples:', serverRules: 'Server rules', ruleHint: 'Matched in order · takes priority over built-ins · applies only to AI commands',
@@ -455,7 +455,7 @@ function SessionCount() {
     if (s.status === 'live') liveN++
     if (s.agentBusy) busyN++
   })
-  var label = text('sessions') + ': ' + String(liveN)
+  var label = text('terminalCount') + ': ' + String(liveN)
   return h('span', {
     className: 'nsh-session-count' + (busyN ? ' nsh-session-count-busy' : ''),
     title: label,
@@ -1238,9 +1238,9 @@ return {
         { name: 'conversation.view', id: 'netshell', order: 20, label: tabLabelEl },
         function () { return NetshellView() })
     })
-    slots.inject('conversation.session.header.utilities', function () {
+    slots.inject('conversation.session.header.actions', function () {
       return slots.register(
-        { name: 'conversation.session.header.utilities', id: 'netshell-session-count', order: 0 },
+        { name: 'conversation.session.header.actions', id: 'netshell-session-count', order: 100 },
         function () { return SessionCount() })
     })
     slots.inject('settings.section', function () {

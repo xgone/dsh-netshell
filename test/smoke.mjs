@@ -127,10 +127,11 @@ const clientCtx = {
   effect(fn) { const d = fn(); clientEffects.push(d); return () => { if (typeof d === 'function') d() } },
 }
 clientPlugin.apply(clientCtx)
-ok(registrations.map(r => r.slotName).join(',') === 'conversation.view,conversation.session.header.utilities,settings.section', 'View、会话 Header utility 和设置 slot 已注册')
+ok(registrations.map(r => r.slotName).join(',') === 'conversation.view,conversation.session.header.actions,settings.section', 'View、会话 Header action 和设置 slot 已注册')
 const labeled = registrations.filter(r => r.reg.label !== undefined)
 ok(labeled.length === 2 && labeled.every(r => typeof r.reg.label === 'function' && typeof r.reg.label() === 'string'), 'Slot label 使用字符串 thunk')
-ok(registrations.some(r => r.reg.id === 'netshell-session-count'), '动态会话计数迁移到 Header utility')
+ok(registrations.some(r => r.reg.id === 'netshell-session-count' && r.reg.name === 'conversation.session.header.actions' && r.reg.order === 100), '活跃终端数注册在会话标题行右侧')
+ok(!registrations.some(r => r.slotName === 'conversation.session.header.utilities'), '右上角 header utility 不再显示活跃终端数')
 ok(insertedStyles.length === 1 && insertedStyles[0].textContent.includes('.nsh-root'), '样式已注入')
 ok(clientFetches.includes('custom/rpc'), 'Client 使用 boot injection 的自定义 document-relative RPC 路径')
 ok(readFileSync(join(root, 'lib/client.js'), 'utf8').includes('if (!res.ok)'), 'Client 检查 RPC HTTP 错误状态')
