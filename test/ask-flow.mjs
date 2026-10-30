@@ -57,6 +57,7 @@ let terminalPlatform = 'posix'
 let spawnTerminalCalls = 0
 const terminalSpecs = []
 const spawnSpecs = []
+const resolvedExecutables = []
 const terminalDoneResolvers = []
 const timer = {
   timeout: (ms) => ms >= 600000
@@ -65,9 +66,15 @@ const timer = {
   interval: () => () => {},
 }
 const subprocess = {
-  resolveExecutable: async (name) => terminalPlatform === 'windows'
-    ? (name === 'powershell.exe' ? 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe' : 'C:\\Windows\\System32\\OpenSSH\\ssh.exe')
-    : '/usr/bin/ssh',
+  resolveExecutable: async (name) => {
+    resolvedExecutables.push({ name, platform: terminalPlatform })
+    if (terminalPlatform !== 'windows') return '/usr/bin/ssh'
+    if (name === 'pwsh') throw new Error('pwsh is not installed')
+    if (name === 'powershell' || name === 'powershell.exe') return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+    if (name === 'cmd') return 'C:\\Windows\\System32\\cmd.exe'
+    if (name === 'bash' || name === 'sh') return 'C:\\Windows\\System32\\bash.exe'
+    return 'C:\\Windows\\System32\\OpenSSH\\ssh.exe'
+  },
   terminalEnvironment: async () => ({ platform: terminalPlatform }),
   spawnTerminal: async (spec) => {
     terminalSpecs.push(spec)
@@ -402,6 +409,13 @@ r = await run({ command: 'echo windows-password-auth' })
 const windowsToolSsh = spawnSpecs.slice(windowsToolStart).find((spec) => spec.argv && spec.argv[0] === 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' && spec.argv.includes('-T'))
 ok(r.ok === true && windowsToolSsh && windowsToolSsh.cwd === '.' && windowsToolSsh.env.SSH_ASKPASS.endsWith('.cmd') && windowsToolSsh.env.SSH_ASKPASS_REQUIRE === 'force' && windowsToolSsh.env.DISPLAY && windowsToolSsh.env.NETSHELL_PW === 'pw', 'D5: Windows netshell_run 使用密码 askpass 并完成一次性 SSH')
 await rpc('netshell.disconnect', { id: windowsRemote.id })
+const windowsShellProbeStart = resolvedExecutables.length
+const windowsLocal = await rpc('netshell.local.connect', {})
+const windowsLocalSpec = terminalSpecs.at(-1)
+const windowsShellProbes = resolvedExecutables.slice(windowsShellProbeStart).map((entry) => entry.name)
+ok(!!windowsLocal.id && windowsLocalSpec.argv[0] === 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', 'D6: Windows 本地终端默认启动 PowerShell')
+ok(windowsShellProbes.join('|') === 'pwsh|powershell', 'D6: Windows 本地终端不先调用可能映射到 WSL 的 bash.exe')
+await rpc('netshell.disconnect', { id: windowsLocal.id })
 record.payload.servers[0].auth = 'agent'
 terminalPlatform = 'posix'
 

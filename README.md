@@ -21,7 +21,7 @@ DSH-NetShell 让你在 DSH 中管理服务器、使用实时终端，并在危�
 
 | 能力 | 你得到什么 |
 | --- | --- |
-| 本地终端 | 直接启动当前设备的 `bash`、`sh`、PowerShell 或 `cmd`，无需 SSH 配置 |
+| 本地终端 | 直接启动当前设备的 `bash`、`sh`、PowerShell 或 `cmd`，无需 SSH 配置；Windows 优先 PowerShell/pwsh/cmd |
 | 远程 SSH | 管理主机、端口、用户和认证方式，多个会话并行运行；支持 Windows OpenSSH Client |
 | 命令护栏 | `allow` 直接执行、`ask` 等待确认、`deny` 直接拦截 |
 | 可见执行 | 人工输入和 AI 执行都实时显示在同一个终端面板 |

@@ -7,6 +7,7 @@
 ### 修复
 
 - **支持 Windows 上的远程 SSH**：使用 Windows OpenSSH 客户端和 DSH ConPTY 启动远程终端；改用 PowerShell 创建私有 `known_hosts` 与临时 askpass helper，不再因平台为 Windows 而拒绝连接。
+- **修复 Windows 本地终端误启 WSL Bash**：Windows 默认优先选择 PowerShell/pwsh/cmd，避免 PATH 中 `bash.exe` 指向故障的 WSL launcher。
 
 ## [0.6.4] - 2026-10-30
 

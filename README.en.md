@@ -21,7 +21,7 @@ DSH-NetShell lets you manage servers, use a live terminal, and keep a clear huma
 
 | Capability | What you get |
 | --- | --- |
-| Local terminal | Start `bash`, `sh`, PowerShell, or `cmd` on the current device without SSH setup |
+| Local terminal | Start `bash`, `sh`, PowerShell, or `cmd` on the current device without SSH setup; Windows prefers PowerShell/pwsh/cmd |
 | Remote SSH | Manage hosts, ports, users, and authentication with multiple sessions; supports Windows OpenSSH Client |
 | Command guard | `allow` runs immediately, `ask` waits for approval, `deny` blocks |
 | Visible execution | Human input and AI commands appear in the same live terminal panel |

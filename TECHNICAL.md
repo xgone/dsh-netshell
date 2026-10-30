@@ -60,7 +60,7 @@
   - `harness.handle(method, fn)`:注册 RPC;`harness.defineTool` + `harness.registerTool`:注册模型工具;
   - `timer.timeout / interval`:轮询与等待。
 - **Client** 可用:`React`(代码风格为 `var x = React.useState(...)` 解构前写法)、`host.call`、`styles.insert`、`ctx.get('slots')`、`ctx.get('locale')`、`console`;slots:`conversation.view`(主区域 Tab,list-kind,`data-conversation-composer-overlay` 定高模式)、`settings.section`(设置页)。
-- 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现;本地终端按 DSH 当前平台选择 shell;远程 SSH 使用平台对应的工作目录和 helper,Windows 通过 Win32 OpenSSH + DSH ConPTY 连接。Windows 密码自动注入依赖支持 `SSH_ASKPASS_REQUIRE=force` 的 OpenSSH(建议 8.7+)。
+- 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现;本地终端按 DSH 平台选择 shell,Windows 优先 `pwsh` / `powershell` / `cmd` 以避开常见 WSL `bash.exe` 启动器;远程 SSH 使用平台对应工作目录和 helper,Windows 通过 Win32 OpenSSH + DSH ConPTY 连接。Windows 密码自动注入依赖支持 `SSH_ASKPASS_REQUIRE=force` 的 OpenSSH(建议 8.7+)。
 
 ## 4. 数据与持久化(为什么没有配置文件)
 
