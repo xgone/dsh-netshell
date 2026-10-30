@@ -76,6 +76,11 @@ var CSS = ''
   + '.nsh-side-head{padding:0 6px 4px;font-size:11px;line-height:16px;font-weight:500;color:' + TK.t3 + '}'
   + '.nsh-srow{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:10px;cursor:pointer;color:' + TK.ls + ';font-size:12.5px;line-height:18px;overflow:hidden}'
   + '.nsh-srow:hover,.nsh-srow-on{background:' + TK.hov + ';color:' + TK.lb + '}'
+  + '.nsh-srow-connecting{cursor:wait}'
+  + '.nsh-connecting{display:inline-flex;align-items:center;gap:5px;flex:none;color:' + TK.t3 + ';font-size:11px;white-space:nowrap}'
+  + '.nsh-spinner{display:inline-block;box-sizing:border-box;width:12px;height:12px;border:2px solid ' + TK.b3 + ';border-top-color:' + TK.warn + ';border-radius:50%;animation:nsh-spin .75s linear infinite}'
+  + '@keyframes nsh-spin{to{transform:rotate(360deg)}}'
+  + '@media (prefers-reduced-motion: reduce){.nsh-spinner{animation:none}}'
   + '.nsh-srow-main{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}'
   + '.nsh-srow-actions{flex:none;display:none;align-items:center;gap:2px}'
   + '.nsh-srow:hover .nsh-srow-actions,.nsh-srow-on .nsh-srow-actions{display:inline-flex}'
@@ -300,7 +305,7 @@ function feed(sc, text) {
 }
 
 var store = {
-  st: { servers: [], activeId: null, editing: null, tick: 0, connectError: null, termTheme: 'dark' },
+  st: { servers: [], activeId: null, editing: null, tick: 0, connectError: null, connectingServers: {}, termTheme: 'dark' },
   subs: new Set(),
   set: function (patch) {
     var next = {}
@@ -322,7 +327,7 @@ var COPY = {
     omitted: '… 已省略较早的 ', lines: ' 行输出', dangerPending: '⚠ 危险命令待确认', matchedRule: '匹配规则:', lockedRule: 'locked 模式白名单外', blockedWaiting: ' · 已拦截,等待你的决定',
     once: '执行一次', always: '永久放行该命令', deny: '拒绝', exec: '执行', blocked: '拦截', allowed: '放行', closed: '退出',
     termTheme: '终端配色:深色 / 浅色', dark: '深色', light: '浅色', historyEmpty: '本会话还没有命令记录', noCommand: '暂无命令', collapseHistory: '收起历史', history: '历史',
-    connect: '连接', sessions: '会话', servers: '服务器', noSessions: '暂无会话', noProfiles: '暂无档案', archivePath: '档案管理:设置 → ',
+    connect: '连接', connecting: '连接中…', sessions: '会话', servers: '服务器', noSessions: '暂无会话', noProfiles: '暂无档案', archivePath: '档案管理:设置 → ',
     connectFailed: '连接失败:', selectServer: '从左侧选择一个服务器开始远程会话', noProfile: '还没有服务器档案 — 在「设置 → ', closeRemove: '关闭并移除',
     rename: '重命名', remove: '移除', disconnectRemove: '断开并移除', pending: '待确认',
     ruleExamples: '示例:', serverRules: '服务器规则', ruleHint: '按顺序匹配 · 优先于内置规则库 · 只约束 AI 执行的命令',
@@ -340,7 +345,7 @@ var COPY = {
     omitted: '… Earlier ', lines: ' lines omitted', dangerPending: '⚠ Dangerous command pending', matchedRule: 'Matched rule:', lockedRule: 'locked mode: command is not allowlisted', blockedWaiting: ' · blocked, waiting for your decision',
     once: 'Run once', always: 'Always allow this command', deny: 'Deny', exec: 'Run', blocked: 'Blocked', allowed: 'Allowed', closed: 'Exit',
     termTheme: 'Terminal theme: dark / light', dark: 'Dark', light: 'Light', historyEmpty: 'No command history in this session', noCommand: 'No command', collapseHistory: 'Hide history', history: 'History',
-    connect: 'Connect', sessions: 'Sessions', servers: 'Servers', noSessions: 'No sessions', noProfiles: 'No profiles', archivePath: 'Profiles: Settings → ',
+    connect: 'Connect', connecting: 'Connecting…', sessions: 'Sessions', servers: 'Servers', noSessions: 'No sessions', noProfiles: 'No profiles', archivePath: 'Profiles: Settings → ',
     connectFailed: 'Connection failed:', selectServer: 'Select a server from the left to start a remote session', noProfile: 'No server profile yet — add one in Settings → ', closeRemove: 'Close and remove',
     rename: 'Rename', remove: 'Remove', disconnectRemove: 'Disconnect and remove', pending: 'Pending',
     ruleExamples: 'Examples:', serverRules: 'Server rules', ruleHint: 'Matched in order · takes priority over built-ins · applies only to AI commands',
@@ -580,15 +585,37 @@ function discoverSessions() {
   }).catch(function () {}).then(function () { discoverInFlightAt = 0 })
 }
 
+function setServerConnecting(serverId, connecting, patch) {
+  var current = store.st.connectingServers || {}
+  var next = {}
+  var ids = Object.keys(current)
+  for (var i = 0; i < ids.length; i++) if (current[ids[i]] && ids[i] !== serverId) next[ids[i]] = true
+  if (connecting) next[serverId] = true
+  var update = {}
+  if (patch) for (var key in patch) update[key] = patch[key]
+  update.connectingServers = next
+  store.set(update)
+}
+
+function connectionLoading() {
+  return h('span', { className: 'nsh-connecting', role: 'status', 'aria-live': 'polite' },
+    h('span', { className: 'nsh-spinner', 'aria-hidden': true }), text('connecting'))
+}
+
 function doConnect(server) {
-  store.set({ connectError: null })
-  host.call('netshell.connect', { serverId: server.id }).then(function (r) {
+  if (!server || !server.id) return Promise.resolve()
+  var connecting = store.st.connectingServers || {}
+  if (connecting[server.id]) return Promise.resolve()
+  setServerConnecting(server.id, true, { connectError: null })
+  return host.call('netshell.connect', { serverId: server.id }).then(function (r) {
     screens.set(r.id, newScreen(server.name))
     if (sessOrder.indexOf(r.id) < 0) sessOrder.push(r.id)
-    store.set({ activeId: r.id })
+    setServerConnecting(server.id, false, { activeId: r.id })
     pollOne(r.id)
-  }).catch(function (e) {
-    store.set({ connectError: String((e && e.message) || e) })
+    return r
+  }, function (e) {
+    setServerConnecting(server.id, false, { connectError: String((e && e.message) || e) })
+    return null
   })
 }
 
@@ -776,10 +803,11 @@ function ServerQuickList() {
     h('span', { className: 'nsh-meta', style: { flex: 1 } }, currentDeviceLabel()),
     h('button', { className: 'nsh-btn nsh-btn-pri', onClick: doLocalConnect }, newSessionLabel()))]
   rows = rows.concat(st.servers.map(function (s) {
+    var connecting = !!(st.connectingServers && st.connectingServers[s.id])
     return h('div', { key: s.id, className: 'nsh-row' },
       h('span', { className: 'nsh-name', style: { minWidth: 100 } }, s.name),
       h('span', { className: 'nsh-meta', style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' } }, s.user + '@' + s.host + ':' + s.port),
-      h('button', { className: 'nsh-btn nsh-btn-pri', onClick: function () { doConnect(s) } }, text('connect')))
+      h('button', { className: 'nsh-btn nsh-btn-pri', disabled: connecting, onClick: function () { doConnect(s) } }, connecting ? connectionLoading() : text('connect')))
   }))
   return h('div', { className: 'nsh-rows', style: { width: '100%', maxWidth: 460 } }, rows)
 }
@@ -868,6 +896,7 @@ function SessionRow(props) {
   },
     h('span', { className: 'nsh-dot', style: { background: statusColor(s.status) } }),
     h('span', { className: 'nsh-srow-main' }, s.label || s.serverName),
+    s.status === 'connecting' ? connectionLoading() : null,
     s.pending ? h('span', { className: 'nsh-badge', style: badgeColor('ask-allow') }, text('pending')) : null,
     h('span', { className: 'nsh-srow-actions' },
       h('button', {
@@ -895,10 +924,17 @@ function sideServerRows(st) {
     h('span', { className: 'nsh-srow-main' }, localTerminalLabel()),
     h('span', { className: 'nsh-meta' }, newSessionLabel()))
   var remote = st.servers.map(function (s) {
-    return h('div', { key: s.id, className: 'nsh-srow', onClick: function () { doConnect(s) }, title: s.user + '@' + s.host + ':' + s.port },
-      h('span', { className: 'nsh-dot', style: { background: TK.t3 } }),
+    var connecting = !!(st.connectingServers && st.connectingServers[s.id])
+    return h('div', {
+      key: s.id,
+      className: 'nsh-srow' + (connecting ? ' nsh-srow-connecting' : ''),
+      onClick: connecting ? undefined : function () { doConnect(s) },
+      title: connecting ? text('connecting') : s.user + '@' + s.host + ':' + s.port,
+      'aria-busy': connecting ? 'true' : undefined
+    },
+      h('span', { className: 'nsh-dot', style: { background: connecting ? TK.warn : TK.t3 } }),
       h('span', { className: 'nsh-srow-main' }, s.name),
-      h('span', { className: 'nsh-meta' }, text('connection')))
+      connecting ? connectionLoading() : h('span', { className: 'nsh-meta' }, text('connection')))
   })
   return [local].concat(remote)
 }
