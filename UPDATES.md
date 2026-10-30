@@ -8,6 +8,12 @@
 - 本地终端命令应使用 DSH 内置本地终端工具，不要通过 `netshell_run` 执行；NetShell 的模型工具只用于用户明确指定的远程服务器。Windows 本地终端优先选择 PowerShell/pwsh/cmd，避免把 `bash.exe` 的 WSL 启动器误当作可用 Bash。
 - 远程 SSH 支持 Windows 10/11 的 OpenSSH Client；Windows 密码自动注入要求支持 `SSH_ASKPASS_REQUIRE=force` 的 OpenSSH（建议 8.7+）。
 
+## 0.6.5 · 2026-10-30
+
+- Windows 远程 SSH 使用 Win32 OpenSSH；宽 ACL 私钥通过当前用户保护的临时副本加载，不修改原文件权限。
+- Windows 本地终端默认选择 PowerShell/pwsh/cmd，避免误启 WSL Bash。
+- 连接服务器时显示 loading 和握手状态；活跃终端数移到会话名称与模式所在行。
+
 ## 0.6.4 · 2026-10-30
 
 - 修复通过包管理器安装后可能导致 DSH 启动失败的问题；`dsh-tools` 现在由 DSH 宿主提供。

@@ -4,6 +4,10 @@
 
 ## [未发布]
 
+后续未发布变更将在此处记录。
+
+## [0.6.5] - 2026-10-30
+
 ### 修复
 
 - **支持 Windows 上的远程 SSH**：使用 Windows OpenSSH 客户端和 DSH ConPTY 启动远程终端；改用 PowerShell 创建私有 `known_hosts` 与临时 askpass helper，不再因平台为 Windows 而拒绝连接。
