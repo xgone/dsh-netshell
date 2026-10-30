@@ -57,6 +57,7 @@ let terminalPlatform = 'posix'
 let spawnTerminalCalls = 0
 const terminalSpecs = []
 const spawnSpecs = []
+const resolvedExecutables = []
 const terminalDoneResolvers = []
 const timer = {
   timeout: (ms) => ms >= 600000
@@ -65,7 +66,15 @@ const timer = {
   interval: () => () => {},
 }
 const subprocess = {
-  resolveExecutable: async () => '/usr/bin/ssh',
+  resolveExecutable: async (name) => {
+    resolvedExecutables.push({ name, platform: terminalPlatform })
+    if (terminalPlatform !== 'windows') return '/usr/bin/ssh'
+    if (name === 'pwsh') throw new Error('pwsh is not installed')
+    if (name === 'powershell' || name === 'powershell.exe') return 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+    if (name === 'cmd') return 'C:\\Windows\\System32\\cmd.exe'
+    if (name === 'bash' || name === 'sh') return 'C:\\Windows\\System32\\bash.exe'
+    return 'C:\\Windows\\System32\\OpenSSH\\ssh.exe'
+  },
   terminalEnvironment: async () => ({ platform: terminalPlatform }),
   spawnTerminal: async (spec) => {
     terminalSpecs.push(spec)
@@ -81,7 +90,18 @@ const subprocess = {
       done,
     }
   },
-  spawn: (spec) => { spawnSpecs.push(spec); return sshOut('ok-output') },
+  spawn: (spec) => {
+    spawnSpecs.push(spec)
+    if (spec.env && spec.env.NS_FILE) return sshOut('C:\\Users\\test\\AppData\\Local\\Temp\\' + spec.env.NS_FILE)
+    if (spec.env && spec.env.NS_KEY_DIR) {
+      const dir = 'C:\\Users\\test\\AppData\\Local\\Temp\\' + spec.env.NS_KEY_DIR
+      return sshOut(dir + '\\id_key.pem\r\n' + dir)
+    }
+    if (terminalPlatform === 'windows' && spec.argv && String(spec.argv[0]).toLowerCase().includes('powershell') && String(spec.argv.at(-1)).includes('known_hosts')) {
+      return sshOut('C:\\Users\\test\\.dsh\\netshell\\known_hosts')
+    }
+    return sshOut('ok-output')
+  },
 }
 
 // userQuestions 桩:验证插件的调用形态并按 mode 决定回答/拒绝
@@ -377,9 +397,51 @@ const local = await rpc('netshell.local.connect', {})
 ok(terminalSpecs.at(-1) && terminalSpecs.at(-1).terminalType === 'xterm-256color', 'D4: 本地终端声明 terminalType')
 await rpc('netshell.disconnect', { id: local.id })
 
+await rpc('netshell.disconnect', { id: conn.id })
 terminalPlatform = 'windows'
+record.payload.servers[0].auth = 'password'
+const windowsSpawnStart = spawnSpecs.length
 const windowsRemote = await rpc('netshell.connect', { serverId: 'srv1' })
-ok(String(windowsRemote.error).includes('POSIX'), 'D5: Windows 远程 SSH fail-closed')
+const windowsTerm = terminalSpecs.at(-1)
+const windowsAskpassCreate = spawnSpecs.slice(windowsSpawnStart).find((spec) => spec.env && spec.env.NS_SCRIPT)
+ok(!!windowsRemote.id && !windowsRemote.error, 'D5: Windows OpenSSH 交互终端可以启动')
+ok(windowsTerm && windowsTerm.cwd === '.' && windowsTerm.argv[0] === 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' && windowsTerm.env.SSH_ASKPASS.endsWith('.cmd') && windowsTerm.env.NETSHELL_PW === 'pw', 'D5: Windows 使用 ssh.exe、ConPTY 和密码 askpass')
+ok(windowsAskpassCreate && windowsAskpassCreate.env.NS_FILE.endsWith('.cmd') && windowsAskpassCreate.env.NS_SCRIPT.includes('NETSHELL_PW') && !windowsAskpassCreate.env.NS_SCRIPT.includes('pw'), 'D5: Windows askpass helper 从进程环境读取密码而不落盘')
+ok(!spawnSpecs.slice(windowsSpawnStart).some((spec) => spec.argv && spec.argv[0] === '/bin/sh'), 'D5: Windows 文件辅助操作不调用 POSIX shell')
+const windowsToolStart = spawnSpecs.length
+r = await run({ command: 'echo windows-password-auth' })
+const windowsToolSsh = spawnSpecs.slice(windowsToolStart).find((spec) => spec.argv && spec.argv[0] === 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' && spec.argv.includes('-T'))
+ok(r.ok === true && windowsToolSsh && windowsToolSsh.cwd === '.' && windowsToolSsh.env.SSH_ASKPASS.endsWith('.cmd') && windowsToolSsh.env.SSH_ASKPASS_REQUIRE === 'force' && windowsToolSsh.env.DISPLAY && windowsToolSsh.env.NETSHELL_PW === 'pw', 'D5: Windows netshell_run 使用密码 askpass 并完成一次性 SSH')
+await rpc('netshell.disconnect', { id: windowsRemote.id })
+record.payload.servers[0].auth = 'key'
+record.payload.servers[0].keyPath = 'D:\\OneDrive\\server\\ssl_key\\test.pem'
+const windowsKeyStart = spawnSpecs.length
+const windowsKeyRemote = await rpc('netshell.connect', { serverId: 'srv1' })
+const windowsKeyTerm = terminalSpecs.at(-1)
+const windowsKeyArg = windowsKeyTerm ? windowsKeyTerm.argv.indexOf('-i') : -1
+const windowsKeyCopy = spawnSpecs.slice(windowsKeyStart).find((spec) => spec.env && spec.env.NS_KEY_DIR)
+ok(!!windowsKeyRemote.id && windowsKeyArg >= 0 && windowsKeyTerm.argv[windowsKeyArg + 1].includes('\\netshell-key-') && !windowsKeyTerm.argv.includes(record.payload.servers[0].keyPath), 'D7: Windows ssh 只引用带受限 ACL 的临时密钥副本')
+ok(windowsKeyCopy && String(windowsKeyCopy.argv.at(-1)).includes('SetAccessRuleProtection') && String(windowsKeyCopy.argv.at(-1)).includes('CopyTo'), 'D7: Windows 密钥副本去掉继承 ACL 并按字节复制')
+const keySessionDone = terminalDoneResolvers.at(-1)
+keySessionDone({ exitCode: 0, signal: null })
+await sleep(5)
+ok(spawnSpecs.some((spec) => spec.env && spec.env.NS_DIR), 'D7: Windows 交互会话退出后清理临时密钥目录')
+await rpc('netshell.disconnect', { id: windowsKeyRemote.id })
+const windowsKeyToolStart = spawnSpecs.length
+r = await run({ command: 'echo windows-key-auth' })
+const windowsKeyTool = spawnSpecs.slice(windowsKeyToolStart).find((spec) => spec.argv && spec.argv[0] === 'C:\\Windows\\System32\\OpenSSH\\ssh.exe' && spec.argv.includes('-T'))
+const windowsKeyToolArg = windowsKeyTool ? windowsKeyTool.argv.indexOf('-i') : -1
+ok(r.ok === true && windowsKeyToolArg >= 0 && windowsKeyTool.argv[windowsKeyToolArg + 1].includes('\\netshell-key-') && !windowsKeyTool.argv.includes(record.payload.servers[0].keyPath), 'D7: Windows netshell_run 也使用受限临时密钥副本')
+record.payload.servers[0].auth = 'agent'
+delete record.payload.servers[0].keyPath
+const windowsShellProbeStart = resolvedExecutables.length
+const windowsLocal = await rpc('netshell.local.connect', {})
+const windowsLocalSpec = terminalSpecs.at(-1)
+const windowsShellProbes = resolvedExecutables.slice(windowsShellProbeStart).map((entry) => entry.name)
+ok(!!windowsLocal.id && windowsLocalSpec.argv[0] === 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', 'D6: Windows 本地终端默认启动 PowerShell')
+ok(windowsShellProbes.join('|') === 'pwsh|powershell', 'D6: Windows 本地终端不先调用可能映射到 WSL 的 bash.exe')
+await rpc('netshell.disconnect', { id: windowsLocal.id })
+record.payload.servers[0].auth = 'agent'
 terminalPlatform = 'posix'
 
 console.log(fail === 0 ? 'ASK-FLOW-OK' : `ASK-FLOW-FAILED (${fail} failures)`)

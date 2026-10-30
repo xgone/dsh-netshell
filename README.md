@@ -21,8 +21,8 @@ DSH-NetShell 让你在 DSH 中管理服务器、使用实时终端，并在危�
 
 | 能力 | 你得到什么 |
 | --- | --- |
-| 本地终端 | 直接启动当前设备的 `bash`、`sh`、PowerShell 或 `cmd`，无需 SSH 配置 |
-| 远程 SSH | 管理主机、端口、用户和认证方式，多个会话并行运行 |
+| 本地终端 | 直接启动当前设备的 `bash`、`sh`、PowerShell 或 `cmd`，无需 SSH 配置；Windows 优先 PowerShell/pwsh/cmd |
+| 远程 SSH | 管理主机、端口、用户和认证方式，多个会话并行运行；支持 Windows OpenSSH Client |
 | 命令护栏 | `allow` 直接执行、`ask` 等待确认、`deny` 直接拦截 |
 | 可见执行 | 人工输入和 AI 执行都实时显示在同一个终端面板 |
 | 凭据隔离 | SSH 密码只进入 DSH 加密凭据库，不进入 AI 消息、工具结果或日志 |
@@ -42,7 +42,7 @@ dsh plugin --profile web add @xgone/dsh-netshell
 dsh plugin --profile web add link:/path/to/dsh-netshell
 ```
 
-安装后重启 DSH Web，然后打开 **设置 → 终端**。
+Windows 远程连接需要启用 Windows OpenSSH Client(`ssh -V` 可检查);密码自动注入需要支持 `SSH_ASKPASS_REQUIRE=force` 的版本(建议 8.7+)。安装后重启 DSH Web，然后打开 **设置 → 终端**。
 
 ## 快速开始
 
@@ -62,7 +62,7 @@ dsh plugin --profile web add link:/path/to/dsh-netshell
 4. 选择权限等级，第一次使用建议保持 `guarded`。
 5. 回到 **终端** Tab，在服务器行点击 **连接**。
 
-密码保存后只显示“已设置”，不会再次回显。
+密码保存后只显示“已设置”，不会再次回显。Windows 私钥认证会在当前用户 ACL 保护的临时目录创建副本供 OpenSSH 使用，连接结束后清理；原 OneDrive/私钥文件及其 ACL 不会修改。
 
 ### 危险命令
 
@@ -99,7 +99,7 @@ AI 和人工输入共用同一套 Guard。`deny` 命令不会执行，`ask` 命�
 
 这是命令操作护栏，不是完整的安全沙箱。它只保护通过本插件终端和 `netshell_run` 进入的命令；其他插件或通用 Shell 工具建立的 SSH 连接不在拦截范围内。对敏感环境建议使用 `locked`，并审查交互式程序内部执行的操作。
 
-SSH 主机指纹保存在插件私有的 `~/.dsh/netshell/known_hosts`，不会写入用户手工 SSH 使用的 `~/.ssh/known_hosts`。
+SSH 主机指纹保存在插件私有的 `$DSH_HOME/netshell/known_hosts`(未设置 `DSH_HOME` 时回退到 `~/.dsh/netshell`)，不会写入用户手工 SSH 使用的 `~/.ssh/known_hosts`。
 
 ## 文档
 

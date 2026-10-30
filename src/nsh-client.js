@@ -210,7 +210,9 @@ function styleEq(a, b) { return a.fg === b.fg && a.bg === b.bg && a.bold === b.b
 function lineSpans(raw) {
   var cells = []
   var col = 0
+  var savedCol = null
   var st = { fg: null, bg: null, bold: false, dim: false, under: false, it: false, strike: false }
+  function blankCell() { return { t: ' ', s: { fg: st.fg, bg: st.bg, bold: st.bold, dim: st.dim, under: st.under, it: st.it, strike: st.strike } } }
   function put(txt) { cells[col] = { t: txt, s: { fg: st.fg, bg: st.bg, bold: st.bold, dim: st.dim, under: st.under, it: st.it, strike: st.strike } }; col++ }
   var i = 0
   var n = raw.length
@@ -235,9 +237,34 @@ function lineSpans(raw) {
           }
           else { cells.length = 0 }
         }
+        else if (fin === 'P') {
+          var deleteCount = Math.max(1, parseInt(params || '1', 10) || 1)
+          while (cells.length < col) cells.push(blankCell())
+          var deleteLength = cells.length
+          for (var di = col; di < deleteLength; di++) cells[di] = di + deleteCount < deleteLength ? cells[di + deleteCount] : blankCell()
+        }
+        else if (fin === '@') {
+          var insertCount = Math.max(1, parseInt(params || '1', 10) || 1)
+          while (cells.length < col) cells.push(blankCell())
+          var insertLength = cells.length
+          cells.length = insertLength + insertCount
+          for (var ii = insertLength - 1; ii >= col; ii--) cells[ii + insertCount] = cells[ii]
+          for (var ib = 0; ib < insertCount; ib++) cells[col + ib] = blankCell()
+        }
+        else if (fin === 'X') {
+          var eraseCount = Math.max(1, parseInt(params || '1', 10) || 1)
+          for (var ei = col; ei < Math.min(cells.length, col + eraseCount); ei++) cells[ei] = blankCell()
+        }
         else if (fin === 'D') { col = Math.max(0, col - (parseInt(params || '1', 10) || 1)) }
         else if (fin === 'C') { col = col + (parseInt(params || '1', 10) || 1) }
         else if (fin === 'G') { col = Math.max(0, (parseInt(params || '1', 10) || 1) - 1) }
+        else if (fin === 'H' || fin === 'f') {
+          var cursorParams = params.split(';')
+          var targetColumn = parseInt(cursorParams.length > 1 ? cursorParams[cursorParams.length - 1] : '1', 10)
+          col = Math.max(0, (targetColumn || 1) - 1)
+        }
+        else if (fin === 's') { savedCol = col }
+        else if (fin === 'u' && savedCol !== null) { col = savedCol }
         i = j + 1
         continue
       }
@@ -248,6 +275,8 @@ function lineSpans(raw) {
         if (i > n) i = n
         continue
       }
+      if (raw.charAt(i + 1) === '7') { savedCol = col; i += 2; continue }
+      if (raw.charAt(i + 1) === '8') { if (savedCol !== null) col = savedCol; i += 2; continue }
       i += 2
       continue
     }

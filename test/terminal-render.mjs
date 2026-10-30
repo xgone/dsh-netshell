@@ -29,4 +29,11 @@ parsed = renderFns.lineSpans('a\u001b[3Cx')
 ok(parsed.col === 5, 'writing after a cursor gap advances from the absolute column')
 ok(parsed.spans.map((x) => x.t).join('') === 'a   x', 'middle cursor gap is rendered as spaces')
 
+parsed = renderFns.lineSpans('ab\u001b[D\u001b[@x')
+ok(parsed.spans.map((x) => x.t).join('') === 'axb', 'CSI @ inserts a blank at the cursor before overwrite')
+parsed = renderFns.lineSpans('abc\u001b[2D\u001b[X')
+ok(parsed.spans.map((x) => x.t).join('') === 'a c', 'CSI X erases characters without shifting the line')
+parsed = renderFns.lineSpans('PS> lls\u001b[2D\u001b[P\u001b[C')
+ok(parsed.spans.map((x) => x.t).join('').trimEnd() === 'PS> ls' && parsed.col === 6, 'cursor delete redraw removes a stale duplicated character')
+
 console.log('TERMINAL-RENDER-OK')

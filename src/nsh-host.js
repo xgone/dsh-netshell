@@ -213,12 +213,24 @@ return {
     }
 
     function cleanupAskpass(s) {
-      if (!s || !s.askpassPath) return
-      var path = s.askpassPath
+      if (!s) return
+      var askpassPath = s.askpassPath
+      var keyCopyPath = s.keyCopyPath
       s.askpassPath = null
+      s.keyCopyPath = null
+      if (s.platform === 'windows') {
+        if (askpassPath) ignoreAsync(runWindowsPowerShell('Remove-Item -LiteralPath $env:NS_FILE -Force -ErrorAction SilentlyContinue', { NS_FILE: askpassPath }))
+        if (s.keyCopyDir) ignoreAsync(runWindowsPowerShell('Remove-Item -LiteralPath $env:NS_DIR -Recurse -Force -ErrorAction SilentlyContinue', { NS_DIR: s.keyCopyDir }))
+        else if (keyCopyPath) ignoreAsync(runWindowsPowerShell('Remove-Item -LiteralPath $env:NS_FILE -Force -ErrorAction SilentlyContinue', { NS_FILE: keyCopyPath }))
+        return
+      }
+      var paths = []
+      if (askpassPath) paths.push(askpassPath)
+      if (keyCopyPath) paths.push(keyCopyPath)
+      if (paths.length === 0) return
       try {
         var cleanup = subprocess.spawn({
-          argv: ['/bin/sh', '-c', 'rm -f -- "$1"', 'sh', path],
+          argv: ['/bin/sh', '-c', 'rm -f -- "$1"', 'sh', paths[0]],
           cwd: '/tmp',
           stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 }, stderr: { maxBytes: 1024 } },
           graceMs: 3000
@@ -552,8 +564,69 @@ return {
       return after()
     }
 
-function makeAskpass(s) {
+function runWindowsPowerShell(command, env) {
+      return subprocess.resolveExecutable('powershell.exe').then(function (powershellPath) {
+        var h = subprocess.spawn({
+          argv: [powershellPath, '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ' + command],
+          cwd: '.',
+          env: env || {},
+          stdio: { stdin: 'ignore', stdout: { maxBytes: 4096 }, stderr: { maxBytes: 4096 } },
+          graceMs: 5000
+        })
+        return h.done.then(function (out) {
+          var stdout = h.collected && h.collected.stdout ? h.collected.stdout.readFrom(0).text : ''
+          var stderr = h.collected && h.collected.stderr ? h.collected.stderr.readFrom(0).text : ''
+          if (!out || out.exitCode !== 0) {
+            throw new Error('Windows PowerShell 操作失败 (exit=' + (out && out.exitCode) + ')' + (stderr ? ': ' + stderr.trim() : ''))
+          }
+          return stdout.replace(/^\s+|\s+$/g, '')
+        })
+      })
+    }
+
+    function preparePrivateKey(s, sourcePath) {
+      if (!sourcePath) return Promise.reject(new Error('私钥认证需要填写私钥路径'))
+      if (s.platform !== 'windows') return Promise.resolve(sourcePath)
       nonce += 1
+      var directoryName = 'netshell-key-' + nsToken + '-' + nonce
+      var command = "$ErrorActionPreference = 'Stop'; $source = $env:NS_KEY_SOURCE; $directory = Join-Path $env:TEMP $env:NS_KEY_DIR; try { " +
+        "if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw 'Private key file not found' }; " +
+        "$sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User; " +
+        "$directoryAcl = [System.Security.AccessControl.DirectorySecurity]::new(); $directoryAcl.SetAccessRuleProtection($true, $false); $directoryAcl.SetOwner($sid); " +
+        "$directoryRule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, [System.Security.AccessControl.FileSystemRights]::FullControl, ([System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit), [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow); [void]$directoryAcl.AddAccessRule($directoryRule); " +
+        "[void][System.IO.Directory]::CreateDirectory($directory, $directoryAcl); $destination = Join-Path $directory 'id_key.pem'; " +
+        "$sourceStream = [System.IO.File]::Open($source, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read); " +
+        "try { $destinationStream = [System.IO.File]::Open($destination, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None); " +
+        "try { $sourceStream.CopyTo($destinationStream); $destinationStream.Flush($true) } finally { $destinationStream.Dispose() } } finally { $sourceStream.Dispose() }; " +
+        "$fileAcl = Get-Acl -LiteralPath $destination; $fileAcl.SetAccessRuleProtection($true, $false); foreach ($ace in @($fileAcl.Access)) { [void]$fileAcl.RemoveAccessRuleSpecific($ace) }; $fileAcl.SetOwner($sid); " +
+        "$userRule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, [System.Security.AccessControl.FileSystemRights]::FullControl, [System.Security.AccessControl.AccessControlType]::Allow); [void]$fileAcl.AddAccessRule($userRule); Set-Acl -LiteralPath $destination -AclObject $fileAcl; " +
+        "Write-Output $destination; Write-Output $directory } catch { Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue; throw }"
+      return runWindowsPowerShell(command, { NS_KEY_SOURCE: sourcePath, NS_KEY_DIR: directoryName }).then(function (paths) {
+        var parts = paths.split(/\r?\n/)
+        var copyPath = parts[0]
+        var copyDirectory = parts[1]
+        if (!copyPath || !copyDirectory) throw new Error('无法创建权限受限的 Windows 私钥副本')
+        s.keyCopyPath = copyPath
+        s.keyCopyDir = copyDirectory
+        return copyPath
+      })
+    }
+
+    function makeAskpass(s) {
+      nonce += 1
+      if (s.platform === 'windows') {
+        var windowsFileName = 'netshell-askpass-' + nsToken + '-' + nonce + '.cmd'
+        var CRLF = String.fromCharCode(13) + String.fromCharCode(10)
+        var quote = String.fromCharCode(39)
+        var windowsScript = '@echo off' + CRLF +
+          '"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); [Console]::WriteLine([Environment]::GetEnvironmentVariable(' + quote + 'NETSHELL_PW' + quote + '))"' + CRLF
+        var writeCommand = "$ErrorActionPreference = 'Stop'; $path = Join-Path $env:TEMP $env:NS_FILE; [System.IO.File]::WriteAllText($path, $env:NS_SCRIPT); Write-Output $path"
+        return runWindowsPowerShell(writeCommand, { NS_FILE: windowsFileName, NS_SCRIPT: windowsScript }).then(function (dest) {
+          if (!dest) throw new Error('创建 Windows askpass 辅助脚本失败:未返回文件路径')
+          s.askpassPath = dest
+          return dest
+        })
+      }
       var dest = '/tmp/.netshell-askpass-' + nsToken + '-' + nonce + '.sh'
       var NL = String.fromCharCode(10)
       var BACK = String.fromCharCode(92)
@@ -572,28 +645,37 @@ function makeAskpass(s) {
       })
     }
 
-    // 插件私有 known_hosts(DESIGN §2.1):主机指纹只落在 ~/.dsh/netshell/known_hosts,
-    // 不写入用户 ~/.ssh/known_hosts,两边互不污染、互不牵连。
-    // 首次调用时经 /bin/sh 确保目录 0700 / 文件 0600 并返回路径(结果缓存,失败可重试)。
-    var khFileJob = null
-    function knownHostsFile() {
-      if (khFileJob) return khFileJob
-      var cmd = 'D="$HOME/.dsh/netshell"; F="$D/known_hosts";' +
-        ' mkdir -p "$D" && chmod 700 "$D" && touch "$F" && chmod 600 "$F" && printf %s "$F"'
-      var h = subprocess.spawn({
-        argv: ['/bin/sh', '-c', cmd, 'sh'],
-        cwd: '/tmp',
-        stdio: { stdin: 'ignore', stdout: { maxBytes: 2048 }, stderr: { maxBytes: 2048 } },
-        graceMs: 3000
-      })
-      khFileJob = h.done.then(function (out) {
-        var text = h.collected && h.collected.stdout ? h.collected.stdout.readFrom(0).text : ''
-        text = text.replace(/^\s+|\s+$/g, '')
-        if (!out || out.exitCode !== 0 || !text) throw new Error('无法初始化插件私有 known_hosts 文件(~/.dsh/netshell/)')
-        return text
-      })
-      khFileJob.catch(function () { khFileJob = null })
-      return khFileJob
+    // 插件私有 known_hosts:Windows 使用 DSH_HOME(或 USERPROFILE/.dsh),POSIX 保留 0700/0600 权限。
+    var khFileJobs = { posix: null, windows: null }
+    function knownHostsFile(platform) {
+      var mode = platform === 'windows' ? 'windows' : 'posix'
+      if (khFileJobs[mode]) return khFileJobs[mode]
+      var job
+      if (mode === 'windows') {
+        var windowsCommand = "$ErrorActionPreference = 'Stop'; $root = $env:DSH_HOME; if (-not $root) { $root = Join-Path $env:USERPROFILE '.dsh' }; $directory = Join-Path $root 'netshell'; New-Item -ItemType Directory -Force -Path $directory | Out-Null; $file = Join-Path $directory 'known_hosts'; $stream = [System.IO.File]::Open($file, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::ReadWrite); $stream.Dispose(); Write-Output $file"
+        job = runWindowsPowerShell(windowsCommand).then(function (text) {
+          if (!text) throw new Error('无法初始化插件私有 known_hosts 文件(DSH_HOME/netshell 或 ~/.dsh/netshell)')
+          return text
+        })
+      } else {
+        var cmd = 'D="${DSH_HOME:-$HOME/.dsh}/netshell"; F="$D/known_hosts";' +
+          ' mkdir -p "$D" && chmod 700 "$D" && touch "$F" && chmod 600 "$F" && printf %s "$F"'
+        var h = subprocess.spawn({
+          argv: ['/bin/sh', '-c', cmd, 'sh'],
+          cwd: '/tmp',
+          stdio: { stdin: 'ignore', stdout: { maxBytes: 2048 }, stderr: { maxBytes: 2048 } },
+          graceMs: 3000
+        })
+        job = h.done.then(function (out) {
+          var text = h.collected && h.collected.stdout ? h.collected.stdout.readFrom(0).text : ''
+          text = text.replace(/^\s+|\s+$/g, '')
+          if (!out || out.exitCode !== 0 || !text) throw new Error('无法初始化插件私有 known_hosts 文件(~/.dsh/netshell/)')
+          return text
+        })
+      }
+      khFileJobs[mode] = job
+      job.catch(function () { if (khFileJobs[mode] === job) khFileJobs[mode] = null })
+      return job
     }
 
     function sanitize(server, info) {
@@ -711,92 +793,105 @@ function makeAskpass(s) {
       return s
     }
 
-    function assertRemotePlatform() {
-      if (typeof subprocess.terminalEnvironment !== 'function') return Promise.resolve()
+    function remotePlatform() {
+      if (typeof subprocess.terminalEnvironment !== 'function') return Promise.resolve('posix')
       return subprocess.terminalEnvironment().then(function (env) {
-        if (env && env.platform === 'windows') {
-          return Promise.reject(new Error('NetShell 远程 SSH 当前需要 POSIX 运行环境; Windows 设备请使用 DSH 内置本地终端'))
-        }
+        return env && env.platform === 'windows' ? 'windows' : 'posix'
       })
     }
 
     function spawnSession(server, signal) {
-      return assertRemotePlatform().then(function () {
-        return subprocess.resolveExecutable('ssh')
-      }).then(function (sshPath) {
-        var s = {
-          id: 'ns' + Date.now().toString(36) + (++nonce),
-          server: server, status: 'connecting', outAll: '', outBase: 0, dropped: 0,
-          events: [], evSeq: 0, line: '', hist: [], histIdx: undefined,
-          pending: null, tail: '', atPwPrompt: false, hint: null, closedReason: null, askpassPath: null
-        }
-        var envJob = Promise.resolve(null)
-        if (server.auth === 'password') {
-          envJob = credentials.resolve(refFor(server.id)).then(function (rc) {
-            if (!rc || !rc.value) return Promise.reject(new Error('该服务器未设置密码,请先在设置中保存密码'))
-            return rc.value
-          })
-        }
-        return Promise.all([envJob, knownHostsFile()]).then(function (rs) {
-          var pw = rs[0]
-          var khFile = rs[1]
-          var askpassJob = server.auth === 'password' ? makeAskpass(s) : Promise.resolve(null)
-          return askpassJob.then(function () {
-            var argv = [sshPath, '-tt',
-              '-o', 'StrictHostKeyChecking=accept-new',
-              '-o', 'UserKnownHostsFile=' + khFile,
-              '-o', 'NumberOfPasswordPrompts=1',
-              '-o', 'ServerAliveInterval=15',
-              '-o', 'ConnectTimeout=12']
-            if (server.auth === 'agent') argv.push('-o', 'BatchMode=yes')
-            if (server.auth === 'key') {
-              if (!server.keyPath) return Promise.reject(new Error('私钥认证需要填写私钥路径'))
-              argv.push('-i', server.keyPath, '-o', 'IdentitiesOnly=yes')
-            }
-            argv.push('-p', String(server.port || 22), server.user + '@' + server.host)
-            var env = { TERM: 'xterm-256color', DISPLAY: 'netshell:0' }
-            if (server.auth === 'password') {
-              env.SSH_ASKPASS = s.askpassPath
-              env.SSH_ASKPASS_REQUIRE = 'force'
-              env.NETSHELL_PW = pw
-            }
-            return subprocess.spawnTerminal({
-              argv: argv, cwd: '/tmp', env: env, rows: ROWS, cols: COLS,
-              terminalType: 'xterm-256color', graceMs: 3000, signal: signal
-            }).then(function (handle) {
-              s.handle = handle
-              sessions.set(s.id, s)
-              var outputIterator = handle.output[Symbol.asyncIterator]()
-               var consume = function () {
-                return outputIterator.next().then(function (r) {
-                  if (!r.done) { onOutput(s, r.value); return consume() }
-                })
-              }
-              void consume().catch(function () {})
-              handle.done.then(function (out) { onExit(s, out) }).catch(function () { onExit(s, { exitCode: null, signal: null }) })
-              return s
+      return remotePlatform().then(function (platform) {
+        return subprocess.resolveExecutable('ssh').then(function (sshPath) {
+          var s = {
+            id: 'ns' + Date.now().toString(36) + (++nonce),
+            server: server, platform: platform, status: 'connecting', outAll: '', outBase: 0, dropped: 0,
+            events: [], evSeq: 0, line: '', hist: [], histIdx: undefined,
+            pending: null, tail: '', atPwPrompt: false, hint: null, closedReason: null, askpassPath: null, keyCopyPath: null
+          }
+          var envJob = Promise.resolve(null)
+          if (server.auth === 'password') {
+            envJob = credentials.resolve(refFor(server.id)).then(function (rc) {
+              if (!rc || !rc.value) return Promise.reject(new Error('该服务器未设置密码,请先在设置中保存密码'))
+              return rc.value
             })
+          }
+          var keyJob = server.auth === 'key' ? preparePrivateKey(s, server.keyPath) : Promise.resolve(null)
+          return Promise.all([envJob, knownHostsFile(platform), keyJob]).then(function (rs) {
+            var pw = rs[0]
+            var khFile = rs[1]
+            var keyPath = rs[2]
+            var askpassJob = server.auth === 'password' ? makeAskpass(s) : Promise.resolve(null)
+            return askpassJob.then(function () {
+              var argv = [sshPath, '-tt',
+                '-o', 'StrictHostKeyChecking=accept-new',
+                '-o', 'UserKnownHostsFile=' + khFile,
+                '-o', 'NumberOfPasswordPrompts=1',
+                '-o', 'ServerAliveInterval=15',
+                '-o', 'ConnectTimeout=12']
+              if (server.auth === 'agent') argv.push('-o', 'BatchMode=yes')
+              if (server.auth === 'key') argv.push('-i', keyPath, '-o', 'IdentitiesOnly=yes')
+              argv.push('-p', String(server.port || 22), server.user + '@' + server.host)
+              var env = { TERM: 'xterm-256color', DISPLAY: 'netshell:0' }
+              if (server.auth === 'password') {
+                env.SSH_ASKPASS = s.askpassPath
+                env.SSH_ASKPASS_REQUIRE = 'force'
+                env.NETSHELL_PW = pw
+              }
+              return subprocess.spawnTerminal({
+                argv: argv, cwd: platform === 'windows' ? '.' : '/tmp', env: env, rows: ROWS, cols: COLS,
+                terminalType: 'xterm-256color', graceMs: 3000, signal: signal
+              }).then(function (handle) {
+                s.handle = handle
+                sessions.set(s.id, s)
+                var outputIterator = handle.output[Symbol.asyncIterator]()
+                var consume = function () {
+                  return outputIterator.next().then(function (r) {
+                    if (!r.done) { onOutput(s, r.value); return consume() }
+                  })
+                }
+                void consume().catch(function () {})
+                handle.done.then(function (out) { onExit(s, out) }).catch(function () { onExit(s, { exitCode: null, signal: null }) })
+                return s
+              })
+            })
+          }).catch(function (error) {
+            cleanupAskpass(s)
+            throw error
           })
         })
       })
     }
 
     function resolveLocalShell() {
-      var candidates = [
-        { name: 'bash', kind: 'posix' },
-        { name: 'sh', kind: 'posix' },
-        { name: 'pwsh', kind: 'powershell' },
-        { name: 'powershell', kind: 'powershell' },
-        { name: 'cmd', kind: 'cmd' }
-      ]
-      function next(i) {
-        if (i >= candidates.length) return Promise.reject(new Error('找不到本地 Shell(bash/sh/pwsh/powershell/cmd)'))
-        var candidate = candidates[i]
-        return subprocess.resolveExecutable(candidate.name).then(function (path) {
-          return { path: path, kind: candidate.kind }
-        }, function () { return next(i + 1) })
-      }
-      return next(0)
+      var platformJob = typeof subprocess.terminalEnvironment === 'function'
+        ? subprocess.terminalEnvironment()
+        : Promise.resolve({ platform: 'posix' })
+      return platformJob.then(function (env) {
+        var candidates = env && env.platform === 'windows'
+          ? [
+            { name: 'pwsh', kind: 'powershell' },
+            { name: 'powershell', kind: 'powershell' },
+            { name: 'cmd', kind: 'cmd' },
+            { name: 'bash', kind: 'posix' },
+            { name: 'sh', kind: 'posix' }
+          ]
+          : [
+            { name: 'bash', kind: 'posix' },
+            { name: 'sh', kind: 'posix' },
+            { name: 'pwsh', kind: 'powershell' },
+            { name: 'powershell', kind: 'powershell' },
+            { name: 'cmd', kind: 'cmd' }
+          ]
+        function next(i) {
+          if (i >= candidates.length) return Promise.reject(new Error('找不到本地 Shell(bash/sh/pwsh/powershell/cmd)'))
+          var candidate = candidates[i]
+          return subprocess.resolveExecutable(candidate.name).then(function (path) {
+            return { path: path, kind: candidate.kind }
+          }, function () { return next(i + 1) })
+        }
+        return next(0)
+      })
     }
 
     function spawnLocalSession() {
@@ -1004,33 +1099,34 @@ function makeAskpass(s) {
           return rc.value
         })
         : Promise.resolve(null)
-      return assertRemotePlatform().then(function () {
-        return Promise.all([subprocess.resolveExecutable('ssh'), knownHostsFile(), passwordJob]).then(function (rs) {
+      return remotePlatform().then(function (platform) {
+        var authFiles = { askpassPath: null, keyCopyPath: null, platform: platform }
+        var keyJob = server.auth === 'key' ? preparePrivateKey(authFiles, server.keyPath) : Promise.resolve(null)
+        return Promise.all([subprocess.resolveExecutable('ssh'), knownHostsFile(platform), passwordJob, keyJob]).then(function (rs) {
           var sshPath = rs[0]
           var khFile = rs[1]
           var password = rs[2]
-          var askpass = { askpassPath: null }
-          var askpassJob = server.auth === 'password' ? makeAskpass(askpass) : Promise.resolve(null)
+          var keyPath = rs[3]
+          var askpassJob = server.auth === 'password' ? makeAskpass(authFiles) : Promise.resolve(null)
           return askpassJob.then(function () {
             var argv = [sshPath, '-T',
               '-o', 'StrictHostKeyChecking=accept-new',
               '-o', 'UserKnownHostsFile=' + khFile,
               '-o', 'NumberOfPasswordPrompts=1',
               '-o', 'ConnectTimeout=12']
-            if (server.auth === 'key') {
-              if (!server.keyPath) return Promise.reject(new Error('私钥认证需要填写私钥路径'))
-              argv.push('-i', server.keyPath, '-o', 'IdentitiesOnly=yes')
-            }
+            if (server.auth === 'agent') argv.push('-o', 'BatchMode=yes')
+            if (server.auth === 'key') argv.push('-i', keyPath, '-o', 'IdentitiesOnly=yes')
             argv.push('-p', String(server.port || 22), server.user + '@' + server.host, cmd)
             var env = {}
             if (server.auth === 'password') {
-              env.SSH_ASKPASS = askpass.askpassPath
+              env.SSH_ASKPASS = authFiles.askpassPath
               env.SSH_ASKPASS_REQUIRE = 'force'
+              env.DISPLAY = 'netshell:0'
               env.NETSHELL_PW = password
             }
             var handle = subprocess.spawn({
               argv: argv,
-              cwd: '/tmp',
+              cwd: platform === 'windows' ? '.' : '/tmp',
               env: env,
               stdio: { stdin: 'ignore', stdout: { maxBytes: 200000, spill: { maxBytes: 400000 } }, stderr: { maxBytes: 200000 } },
               graceMs: 3000,
@@ -1041,13 +1137,16 @@ function makeAskpass(s) {
               var stderr = handle.collected && handle.collected.stderr ? handle.collected.stderr.readFrom(0).text : ''
               return { code: out.exitCode, stdout: stdout, stderr: stderr }
             }).then(function (value) {
-              cleanupAskpass(askpass)
+              cleanupAskpass(authFiles)
               return value
             }, function (error) {
-              cleanupAskpass(askpass)
+              cleanupAskpass(authFiles)
               throw error
             })
           })
+        }).catch(function (error) {
+          cleanupAskpass(authFiles)
+          throw error
         })
       })
     }
