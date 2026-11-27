@@ -387,9 +387,18 @@ var store = {
 }
 
 var localeService = null
-function isEnglish() {
+// Copy language follows the DSH UI locale: zh* → Chinese, ru* → Russian,
+// everything else → English. (This fork adds the ru dictionary; upstream ships
+// zh/en only.)
+function copyLang() {
   var active = localeService && localeService.getLocale().active
-  return typeof active === 'string' && (active === 'en' || active.indexOf('en-') === 0)
+  if (typeof active !== 'string') return 'en'
+  if (active.indexOf('zh') === 0) return 'zh'
+  if (active.indexOf('ru') === 0) return 'ru'
+  return 'en'
+}
+function isEnglish() {
+  return copyLang() !== 'zh'
 }
 var COPY = {
   zh: {
@@ -427,10 +436,28 @@ var COPY = {
     noServers: 'No server profiles yet. Add one; passwords are stored in DSH encrypted credentials and injected by the plugin, never sent through the AI session.', levels: 'Permission levels', openHelp: '[open] Permissive: commands run directly except built-in deny rules such as rm -rf /.', guardedHelp: '[guarded] Default: dangerous ask rules pause for your confirmation.', lockedHelp: '[locked] Strict: only allow rules run directly; all other commands require confirmation.', requiredFields: 'Name, host, and username are required', invalidPort: 'Port must be an integer from 1 to 65535', emptyRule: 'Rule {n} has an empty command pattern; fill it in or remove it', rulePatternPlaceholder: 'Command pattern, e.g. rm -rf /var/log/*', ruleActionTitle: 'deny blocks / ask confirms / allow runs directly', denyAction: 'deny block', askAction: 'ask confirm', allowAction: 'allow run',
     exampleAllowTip: 'Allow log cleanup', exampleDenyTip: 'Permanently block force pushes on this server', exampleAskSystemTip: 'Confirm before managing systemd services', exampleAskDockerTip: 'Confirm before deleting containers', newNamePlaceholder: 'production-web-01', hostPlaceholder: '10.0.0.5 or host.example.com', closeSession: 'Session ended:', unknown: 'Unknown reason',
     passwordConfigured: 'Password stored in credentials', passwordNotConfigured: 'Password not set', connection: 'Connect',
+  },
+  ru: {
+    terminal: 'Терминал', localTerminal: 'Локальный терминал', currentDevice: 'Это устройство', newSession: 'Создать',
+    omitted: '… ранее скрыто ', lines: ' строк вывода', dangerPending: '⚠ Опасная команда ждёт решения', matchedRule: 'Правило:', lockedRule: 'режим locked: команда не в белом списке', blockedWaiting: ' · заблокировано, ждёт вашего решения',
+    once: 'Выполнить один раз', always: 'Всегда разрешать эту команду', deny: 'Отклонить', exec: 'Выполнить', blocked: 'Заблокировано', allowed: 'Разрешено', closed: 'Выход',
+    termTheme: 'Тема терминала: тёмная / светлая', dark: 'Тёмная', light: 'Светлая', historyEmpty: 'В этой сессии ещё нет команд', noCommand: 'Нет команд', collapseHistory: 'Скрыть историю', history: 'История',
+    connect: 'Подключиться', connecting: 'Подключение…', sessions: 'Сессии', terminalCount: 'Терминалы', servers: 'Серверы', noSessions: 'Нет сессий', noProfiles: 'Нет профилей', archivePath: 'Профили: Настройки → ',
+    connectFailed: 'Ошибка подключения:', selectServer: 'Выберите сервер слева, чтобы начать удалённую сессию', noProfile: 'Профилей серверов пока нет — добавьте в Настройки → ', closeRemove: 'Закрыть и удалить',
+    rename: 'Переименовать', remove: 'Удалить', disconnectRemove: 'Отключить и удалить', pending: 'Ожидает',
+    ruleExamples: 'Примеры:', serverRules: 'Правила сервера', ruleHint: 'Сопоставление по порядку · приоритет над встроенными · только для команд ИИ',
+    ruleHelp1: 'Сопоставляется полная команда: * (любой текст) и ? (один символ), регистр не важен, префиксы sudo / nohup отбрасываются.',
+    ruleHelp2: 'Срабатывает первое совпадение: deny блокирует, ask спрашивает, allow выполняет сразу (в режиме locked allow-правила — это белый список).',
+    noCustomRules: 'Своих правил нет — команды без совпадений обрабатываются встроенными правилами и уровнем доступа. Добавьте правило из примеров ниже.', addRule: '+ Добавить правило',
+    editServer: 'Изменить сервер:', newServer: 'Новый сервер', name: 'Название', host: 'Хост', port: 'Порт', user: 'Пользователь', auth: 'Аутентификация', password: 'Пароль', key: 'Ключ', agent: 'ssh-agent', keyPath: 'Путь к ключу', level: 'Уровень доступа',
+    open: 'open свободный', guarded: 'guarded по умолчанию', locked: 'locked строгий', passwordKeep: 'Задан — оставьте пустым, чтобы не менять', passwordHint: 'Введите пароль (хранится в зашифрованных учётных данных, не проходит через ИИ-сессию)', clearPassword: 'Очистить сохранённый пароль', save: 'Сохранить', cancel: 'Отмена', edit: 'Изменить', delete: 'Удалить',
+    noServers: 'Профилей серверов пока нет. Добавьте сервер — пароль сохраняется в зашифрованных учётных данных DSH и подставляется плагином, не проходя через ИИ-сессию.', levels: 'Уровни доступа', openHelp: '[open] Свободный: команды выполняются напрямую, кроме встроенных deny-правил (например, rm -rf /).', guardedHelp: '[guarded] По умолчанию: опасные команды с ask-правилом останавливаются и ждут вашего подтверждения.', lockedHelp: '[locked] Строгий: напрямую выполняются только команды с allow, остальные требуют подтверждения.', requiredFields: 'Название, хост и пользователь обязательны', invalidPort: 'Порт должен быть целым числом от 1 до 65535', emptyRule: 'У правила {n} пустой шаблон команды — заполните или удалите строку', rulePatternPlaceholder: 'Шаблон команды, например rm -rf /var/log/*', ruleActionTitle: 'deny блокирует / ask спрашивает / allow выполняет', denyAction: 'deny блокировать', askAction: 'ask подтверждать', allowAction: 'allow разрешать',
+    exampleAllowTip: 'Разрешить очистку логов', exampleDenyTip: 'Навсегда запретить force-push на этом сервере', exampleAskSystemTip: 'Подтверждать управление службами systemd', exampleAskDockerTip: 'Подтверждать удаление контейнеров', newNamePlaceholder: 'prod-web-01', hostPlaceholder: '10.0.0.5 или host.example.com', closeSession: 'Сессия завершена:', unknown: 'Неизвестная причина',
+    passwordConfigured: 'Пароль сохранён в учётных данных', passwordNotConfigured: 'Пароль не задан', connection: 'Подключение',
   }
 }
 function text(key) {
-  var dict = isEnglish() ? COPY.en : COPY.zh
+  var dict = COPY[copyLang()] || COPY.en
   return dict[key] || key
 }
 function termLabel() { return text('terminal') }
@@ -1087,7 +1114,7 @@ function NetshellView() {
   if (!sc) {
     main = h('div', { className: 'nsh-empty' },
       st.connectError ? h('div', { style: { color: TK.err } }, text('connectFailed') + st.connectError) : null,
-      h('div', { className: 'nsh-muted' }, st.servers.length ? text('selectServer') : (isEnglish() ? text('noProfile') + termLabel() + '.' : text('noProfile') + termLabel() + '」中新增')),
+      h('div', { className: 'nsh-muted' }, st.servers.length ? text('selectServer') : (copyLang() === 'zh' ? text('noProfile') + termLabel() + '」中新增' : text('noProfile') + termLabel() + '.')),
       h(ServerQuickList, null))
   } else {
     main = h('div', { className: 'nsh-session' },

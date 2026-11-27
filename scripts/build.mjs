@@ -237,6 +237,47 @@ function splice(template, marker, source) {
 }
 
 mkdirSync(join(root, 'lib'), { recursive: true })
+
+// 文案表(`COPY`)键一致性:所有语言的键集合必须与 `en` 完全一致,
+// 新增语言时少翻一条就会在这里失败,而不是在界面上显示成原始 key。
+function readCopyTable(source) {
+  const marker = 'var COPY = {'
+  const start = source.indexOf(marker)
+  if (start < 0) throw new Error('源文件中找不到 COPY 表')
+  const open = source.indexOf('{', start)
+  let depth = 0
+  let end = -1
+  for (let i = open; i < source.length; i += 1) {
+    const ch = source[i]
+    if (ch === "'" || ch === '"') {
+      const quote = ch
+      for (i += 1; i < source.length && source[i] !== quote; i += 1) if (source[i] === '\\') i += 1
+      continue
+    }
+    if (ch === '{') depth += 1
+    else if (ch === '}') {
+      depth -= 1
+      if (depth === 0) { end = i + 1; break }
+    }
+  }
+  if (end < 0) throw new Error('COPY 表括号不匹配')
+  return new Function('return ' + source.slice(open, end))()
+}
+
+const copy = readCopyTable(clientSource)
+const languages = Object.keys(copy)
+const baseline = Object.keys(copy.en || {}).sort()
+if (baseline.length === 0) throw new Error('COPY.en 为空')
+for (const lang of languages) {
+  const keys = Object.keys(copy[lang]).sort()
+  const missing = baseline.filter((key) => !keys.includes(key))
+  const extra = keys.filter((key) => !baseline.includes(key))
+  if (missing.length > 0 || extra.length > 0) {
+    throw new Error('COPY.' + lang + ' 与 COPY.en 键不一致:缺少 [' + missing.join(', ') + '],多余 [' + extra.join(', ') + ']')
+  }
+}
+
 writeFileSync(join(root, 'lib/index.js'), splice(hostTemplate, '/*__HOST_SOURCE__*/', hostSource))
 writeFileSync(join(root, 'lib/client.js'), splice(clientTemplate, '/*__CLIENT_SOURCE__*/', clientSource))
 console.log('build: lib/index.js + lib/client.js 已生成(源: src/nsh-host.js + src/nsh-client.js)')
+console.log('build: COPY 语言 ' + languages.join('/') + ' 键一致(' + baseline.length + ' 个键)')
