@@ -11,6 +11,12 @@
 - **客户端界面支持俄语(ru)**：`COPY` 文案表新增 `ru` 词典(93 条,与 `en` 键集合一致)。界面语言改为跟随 DSH 的 `locale` 服务:值以 `zh` 开头用中文、以 `ru` 开头用俄语、其余用英文(`copyLang()`),不再只区分中文与英文;`text()` 取不到对应词典时回落到英文。宿主侧文案(工具描述、Guard 规则说明、错误信息)不在此改动范围内,仍保持原有中文字符串。
 - **构建期校验文案表键一致**:`scripts/build.mjs` 新增 `readCopyTable()` 与键集合比对,任一语言的键缺失或多余都会让构建直接失败,避免新增语言时漏翻的条目在界面上显示成原始 key。
 
+### 文档
+
+- **英文文档成为默认入口**:`README.md`、`TECHNICAL.md`、`DYNAMIC.md`、`UPDATES.md` 改为英文版,中文原文保留为 `README.zh.md` / `TECHNICAL.zh.md` / `DYNAMIC.zh.md` / `UPDATES.zh.md`,并新增俄文 `README.ru.md`;三份 README 顶部互相链接。
+- 三份 README 的能力表补充「界面语言」一行,说明文案跟随 DSH 的界面语言(中文 / 英语 / 俄语)。
+- `package.json` 的 `files` 同步收录新增文档。
+
 ## [0.6.6] - 2026-11-02
 
 ### 修复
