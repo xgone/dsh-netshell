@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.zh.md">中文</a> · <a href="README.md">English</a> · <strong>Русский</strong> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <strong>Русский</strong> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — защищённый локальный и удалённый SSH-терминал" width="720" />
@@ -104,7 +104,7 @@ dsh plugin --profile web add link:/path/to/dsh-netshell
 
 ## Документация
 
-- [中文 README](README.zh.md) · [English README](README.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
+- [中文 README](README.md) · [English README](README.en.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
 - [История обновлений](UPDATES.md) · [中文](UPDATES.zh.md)
 - [Технические детали](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [Руководство по динамической загрузке](DYNAMIC.md) · [中文](DYNAMIC.zh.md)

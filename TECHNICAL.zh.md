@@ -2,7 +2,7 @@
 
 > 读者:参与开发的工程师与 AI agent。目标:读完能安全地修改代码。
 >
-> - 使用说明见 [README.md](README.md);原始设计与宿主契约调研见 [DESIGN.zh.md](DESIGN.zh.md)(注意:DESIGN 是前期设计,**与实现的差异以本文 §8.3 和源码为准**)。
+> - 使用说明见 [README.md](README.md)(英文版 [README.en.md](README.en.md));原始设计与宿主契约调研见 [DESIGN.zh.md](DESIGN.zh.md)(注意:DESIGN 是前期设计,**与实现的差异以本文 §8.3 和源码为准**)。
 > - 本仓库即插件本体,没有构建步骤、没有依赖,`nsh-host.js` + `nsh-client.js` 两个文件就是全部产物。
 
 ## 1. 给 AI Agent 的导读
@@ -29,10 +29,12 @@
 | `lib/index.js` | 生成物 · Loader 静态宿主半区(真实 Node ESM + harness shim + `/netshell/rpc` 分发) |
 | `lib/client.js` | 生成物 · Loader 静态浏览器半区(`window.__ModuleLoader__` 工厂 + builtin shim) |
 | `cordis.patch.yml` | bundle 补丁:loader 树的 `netshell` 行 |
-| `test/smoke.mjs` | 端到端冒烟:桩服务驱动两个生成半区 + 真实 HTTP RPC(12 项断言) |
+| `test/smoke.mjs` | 端到端冒烟:桩服务驱动两个生成半区 + 真实 HTTP RPC(23 项断言) |
+| `README.md` / `README.en.md` | 中文默认 README 与英文 README(另有 `README.ru/ja/de/fr/es/ko.md`) |
+| `TECHNICAL.zh.md` / `TECHNICAL.md` | 技术说明(本文为中文;英文默认见 `TECHNICAL.md`) |
+| `DYNAMIC.zh.md` / `DYNAMIC.md` | 动态加载手册(中 / 英) |
+| `UPDATES.zh.md` / `UPDATES.md` | 面向使用者的更新记录(中 / 英) |
 | `DESIGN.zh.md` | 设计方案,§9 的宿主契约调研仍有效 |
-| `TECHNICAL.md` | 本文 |
-| `UPDATES.md` | 面向使用者的更新记录 |
 | `CHANGELOG.md` | 完整历史与实现变更记录 |
 
 两个 `src/` 源文件均以 `var …; return { inject: [...], apply(ctx) { … } }` 结尾——这是**动态沙箱的函数体求值**格式;`build.mjs` 把整份源码原样内联进一个 IIFE,因此业务逻辑只有一份,模式差异全部收敛在生成物的 shim 里:
@@ -244,7 +246,7 @@ server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent
 - 在 GitHub 仓库的 `Settings → Secrets and variables → Actions` 中配置 `NPM_TOKEN`，只在发布步骤注入。
 - 创建 GitHub Release 时，Release tag 去掉可选的 `v` 前缀后必须与 `package.json` 的 `version` 完全一致；否则工作流会在发布前失败。
 - `workflow_dispatch` 可手动发布当前分支上的包版本，发布前仍会执行 `pnpm test`。
-- npm 包的 `files` 白名单包含双语 README、技术文档和 `assets/`，保证 npm 页面中的文档图片可用。
+- npm 包的 `files` 白名单包含多语言 README、技术文档和 `assets/`，保证 npm 页面中的文档图片可用。
 
 ## 13. 路线图(DESIGN 分期 + 本文暴露的技术债)
 

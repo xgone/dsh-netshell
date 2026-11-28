@@ -13,7 +13,7 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
-    "README.zh.md",
+    "README.en.md",
     "README.ru.md",
     "README.ja.md",
     "README.de.md",
@@ -34,7 +34,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "check": "node --check lib/index.js && node --check lib/client.js",
-    "test": "pnpm build && pnpm check && node test/smoke.mjs && node test/ask-flow.mjs && node test/terminal-render.mjs && node test/connect-flow.mjs && node test/poll-rpc.mjs",
+    "test": "pnpm build && pnpm check && node test/locale.mjs && node test/smoke.mjs && node test/ask-flow.mjs && node test/terminal-render.mjs && node test/connect-flow.mjs && node test/poll-rpc.mjs",
     "prepublishOnly": "pnpm test"
   },
   "license": "MIT",

@@ -391,11 +391,13 @@ var localeService = null
 // ja*/ko*/de*/fr*/es* → that language, everything else → English.
 var COPY_LANGS = ['zh', 'ru', 'ja', 'ko', 'de', 'fr', 'es']
 function copyLang() {
-  var active = localeService && localeService.getLocale().active
+  var loc = localeService && typeof localeService.getLocale === 'function' ? localeService.getLocale() : null
+  var active = loc && loc.active
   if (typeof active !== 'string') return 'en'
-  var lower = active.toLowerCase()
+  // Normalize BCP-47 tags (zh-CN, zh_CN, RU-ru) and match the full language subtag only.
+  var base = active.trim().toLowerCase().replace(/_/g, '-').split('-')[0]
   for (var i = 0; i < COPY_LANGS.length; i += 1) {
-    if (lower.indexOf(COPY_LANGS[i]) === 0) return COPY_LANGS[i]
+    if (base === COPY_LANGS[i]) return COPY_LANGS[i]
   }
   return 'en'
 }
@@ -452,7 +454,7 @@ var COPY = {
     open: 'open свободный', guarded: 'guarded по умолчанию', locked: 'locked строгий', passwordKeep: 'Задан — оставьте пустым, чтобы не менять', passwordHint: 'Введите пароль (хранится в зашифрованных учётных данных, не проходит через ИИ-сессию)', clearPassword: 'Очистить сохранённый пароль', save: 'Сохранить', cancel: 'Отмена', edit: 'Изменить', delete: 'Удалить',
     noServers: 'Профилей серверов пока нет. Добавьте сервер — пароль сохраняется в зашифрованных учётных данных DSH и подставляется плагином, не проходя через ИИ-сессию.', levels: 'Уровни доступа', openHelp: '[open] Свободный: команды выполняются напрямую, кроме встроенных deny-правил (например, rm -rf /).', guardedHelp: '[guarded] По умолчанию: опасные команды с ask-правилом останавливаются и ждут вашего подтверждения.', lockedHelp: '[locked] Строгий: напрямую выполняются только команды с allow, остальные требуют подтверждения.', requiredFields: 'Название, хост и пользователь обязательны', invalidPort: 'Порт должен быть целым числом от 1 до 65535', emptyRule: 'У правила {n} пустой шаблон команды — заполните или удалите строку', rulePatternPlaceholder: 'Шаблон команды, например rm -rf /var/log/*', ruleActionTitle: 'deny блокирует / ask спрашивает / allow выполняет', denyAction: 'deny блокировать', askAction: 'ask подтверждать', allowAction: 'allow разрешать',
     exampleAllowTip: 'Разрешить очистку логов', exampleDenyTip: 'Навсегда запретить force-push на этом сервере', exampleAskSystemTip: 'Подтверждать управление службами systemd', exampleAskDockerTip: 'Подтверждать удаление контейнеров', newNamePlaceholder: 'prod-web-01', hostPlaceholder: '10.0.0.5 или host.example.com', closeSession: 'Сессия завершена:', unknown: 'Неизвестная причина',
-    passwordConfigured: 'Пароль сохранён в учётных данных', passwordNotConfigured: 'Пароль не задан', connection: 'Подключение',
+    passwordConfigured: 'Пароль сохранён в учётных данных', passwordNotConfigured: 'Пароль не задан', connection: 'Подключиться',
   },
   ja: {
     terminal: 'ターミナル', localTerminal: 'ローカルターミナル', currentDevice: 'このデバイス', newSession: '新規', omitted: '… 以前の ', lines: ' 行を省略', dangerPending: '⚠ 危険なコマンドが保留中', matchedRule: '一致したルール:', lockedRule: 'locked モード: コマンドが allowlist に含まれていません', blockedWaiting: ' · ブロック中、判断を待っています', once: '1 回だけ実行', always: 'このコマンドを常に許可', deny: '拒否', exec: '実行', blocked: 'ブロック済み', allowed: '許可済み', closed: '終了', termTheme: 'ターミナルのテーマ: ダーク / ライト', dark: 'ダーク', light: 'ライト', historyEmpty: 'このセッションにはコマンド履歴がありません', noCommand: 'コマンドなし', collapseHistory: '履歴を隠す', history: '履歴', connect: '接続', connecting: '接続中…', sessions: 'セッション', terminalCount: 'ターミナル', servers: 'サーバー', noSessions: 'セッションがありません', noProfiles: 'プロファイルがありません', archivePath: 'プロファイル: 設定 → ', connectFailed: '接続に失敗しました:', selectServer: '左の一覧からサーバーを選択するとリモートセッションを開始できます', noProfile: 'サーバープロファイルがまだありません — 追加するには 設定 → ', closeRemove: '閉じて削除', rename: '名前を変更', remove: '削除', disconnectRemove: '切断して削除', pending: '保留中', ruleExamples: '例:', serverRules: 'サーバーごとのルール', ruleHint: '上から順に照合 · 組み込みルールより優先 · AI のコマンドにのみ適用', ruleHelp1: '*（任意の文字列）と ?（1 文字）でコマンドライン全体を照合します。大文字と小文字は区別せず、sudo / nohup のプレフィックスは取り除かれます。', ruleHelp2: '最初に一致したものが優先されます: deny はブロック、ask は確認、allow は直接実行します（locked モードでは allow ルールが許可リストになります）。', noCustomRules: 'カスタムルールはありません — 一致しないコマンドには組み込みルールと権限レベルが適用されます。下の例から追加できます。', addRule: '+ ルールを追加', editServer: 'サーバーを編集:', newServer: '新しいサーバー',
@@ -912,7 +914,7 @@ function PendingBanner(props) {
   return h('div', { className: 'nsh-banner' },
     h('div', { style: { fontWeight: 600, color: TK.warn, marginBottom: 4 } }, text('dangerPending')),
     h('div', { style: { fontFamily: 'ui-monospace,Menlo,monospace', marginBottom: 2 } }, p.command),
-    h('div', { className: 'nsh-muted', style: { marginBottom: 8 } }, text('matchedRule') + (p.rule || text('lockedRule')) + text('blockedWaiting')),
+    h('div', { className: 'nsh-muted', style: { marginBottom: 8 } }, text('matchedRule') + ' ' + (p.rule || text('lockedRule')) + text('blockedWaiting')),
     h('div', { style: { display: 'flex', gap: 8 } },
       h('button', { className: 'nsh-btn nsh-btn-ok', onClick: function () { decide(id, p.id, 'allow') } }, text('once')),
       h('button', { className: 'nsh-btn', onClick: function () { decide(id, p.id, 'always') } }, text('always')),
@@ -1139,7 +1141,7 @@ function NetshellView() {
   var main
   if (!sc) {
     main = h('div', { className: 'nsh-empty' },
-      st.connectError ? h('div', { style: { color: TK.err } }, text('connectFailed') + st.connectError) : null,
+      st.connectError ? h('div', { style: { color: TK.err } }, text('connectFailed') + ' ' + st.connectError) : null,
       h('div', { className: 'nsh-muted' }, st.servers.length ? text('selectServer') : (copyLang() === 'zh' ? text('noProfile') + termLabel() + '」中新增' : text('noProfile') + termLabel() + (copyLang() === 'ja' ? '。' : '.'))),
       h(ServerQuickList, null))
   } else {
@@ -1227,7 +1229,7 @@ function ServerEditor(props) {
       }),
       h('select', {
         className: 'nsh-in',
-        style: { flex: 'none', width: 118 },
+        style: { flex: 'none', width: 160 },
         value: r.action || 'ask',
         title: text('ruleActionTitle'),
         onChange: function (e) {
@@ -1250,6 +1252,7 @@ function ServerEditor(props) {
       h('span', { className: 'nsh-cap' }, text('ruleHint'))),
     h('p', { className: 'nsh-cap', style: { margin: 0 } },
       text('ruleHelp1'),
+      ' ',
       text('ruleHelp2')),
     (draft.rules || []).length
       ? h('div', { className: 'nsh-rules' }, ruleRows)
@@ -1275,7 +1278,7 @@ function ServerEditor(props) {
       onClick: function () { var rules = (draft.rules || []).slice(); rules.push({ pattern: '', action: 'ask' }); upd({ rules: rules }) }
     }, text('addRule')))
   return h('div', { className: 'nsh-editor' },
-    h('div', { className: 'nsh-title2', style: { fontSize: 14 } }, draft.id ? text('editServer') + draft.name : text('newServer')),
+    h('div', { className: 'nsh-title2', style: { fontSize: 14 } }, draft.id ? text('editServer') + ' ' + draft.name : text('newServer')),
     h('div', { className: 'nsh-grid' },
       h(Field, { label: text('name') },
         h('input', { className: 'nsh-in', value: draft.name || '', onChange: function (e) { upd({ name: e.target.value }) }, placeholder: text('newNamePlaceholder') })),

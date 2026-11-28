@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.zh.md">中文</a> · <a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <strong>Deutsch</strong> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <strong>Deutsch</strong> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Bewachtes lokales und entferntes SSH-Terminal" width="720" />
@@ -104,7 +104,7 @@ SSH-Hostschlüssel werden in der plugin-privaten Datei `$DSH_HOME/netshell/known
 
 ## Dokumentation
 
-- [中文 README](README.zh.md) · [English README](README.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
+- [中文 README](README.md) · [English README](README.en.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
 - [Aktualisierungen](UPDATES.md) · [中文](UPDATES.zh.md)
 - [Technische Hinweise](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [Leitfaden zum dynamischen Laden](DYNAMIC.md) · [中文](DYNAMIC.zh.md)

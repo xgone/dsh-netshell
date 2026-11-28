@@ -7,112 +7,112 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.zh.md">中文</a> · <strong>English</strong> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><strong>中文</strong> · <a href="README.en.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
 
 <p align="center">
-  <img src="assets/social-preview.png" alt="DSH-NetShell — Guarded local and remote SSH terminal" width="720" />
+  <img src="assets/social-preview.png" alt="DSH-NetShell — 受保护的本地与远程 SSH 终端" width="720" />
 </p>
 
-<p align="center"><strong>A guarded local and remote SSH terminal for DeepSeek Harness</strong></p>
+<p align="center"><strong>面向 DeepSeek Harness 的受保护本地与远程 SSH 终端</strong></p>
 
-DSH-NetShell lets you manage servers, use a live terminal, and keep a clear human checkpoint before risky commands run in DSH. Human input and AI actions share the same command guard. Interface copy follows the DSH UI locale — Chinese, English, Russian, Japanese, German, French, Spanish, or Korean.
+DSH-NetShell 让你在 DSH 中管理服务器、使用实时终端，并在危险命令执行前保留一个清晰的人工确认点。人工输入和 AI 操作共用同一套命令护栏。界面文案跟随 DSH 的界面语言:中文、英语、俄语、日语、德语、法语、西班牙语或韩语。
 
-## Highlights
+## 核心能力
 
-| Capability | What you get |
+| 能力 | 你得到什么 |
 | --- | --- |
-| Local terminal | Start `bash`, `sh`, PowerShell, or `cmd` on the current device without SSH setup; Windows prefers PowerShell/pwsh/cmd |
-| Remote SSH | Manage hosts, ports, users, and authentication with multiple sessions; supports Windows OpenSSH Client |
-| Command guard | `allow` runs immediately, `ask` waits for approval, `deny` blocks |
-| Visible execution | Human input and AI commands appear in the same live terminal panel |
-| Credential isolation | SSH passwords stay in DSH's encrypted store and never enter AI messages, tool results, or logs |
-| Command history | Review run, blocked, and allowed counts plus every decision record |
-| Interface language | Chinese, English, Russian, Japanese, German, French, Spanish, or Korean, following the DSH UI locale |
+| 本地终端 | 直接启动当前设备的 `bash`、`sh`、PowerShell 或 `cmd`，无需 SSH 配置；Windows 优先 PowerShell/pwsh/cmd |
+| 远程 SSH | 管理主机、端口、用户和认证方式，多个会话并行运行；支持 Windows OpenSSH Client |
+| 命令护栏 | `allow` 直接执行、`ask` 等待确认、`deny` 直接拦截 |
+| 可见执行 | 人工输入和 AI 执行都实时显示在同一个终端面板 |
+| 凭据隔离 | SSH 密码只进入 DSH 加密凭据库，不进入 AI 消息、工具结果或日志 |
+| 命令历史 | 查看执行、拦截、放行计数和每条命令的裁决记录 |
+| 界面语言 | 中文、英语、俄语、日语、德语、法语、西班牙语或韩语,跟随 DSH 的界面语言设置 |
 
-## Install
+## 安装
 
-Published package:
+已发布包：
 
 ```bash
 dsh plugin --profile web add @xgone/dsh-netshell
 ```
 
-From a local checkout:
+从本地源码安装：
 
 ```bash
 dsh plugin --profile web add link:/path/to/dsh-netshell
 ```
 
-On Windows, install/enable the Windows OpenSSH Client (`ssh -V` checks availability); saved-password automation requires `SSH_ASKPASS_REQUIRE=force` support (OpenSSH 8.7+ recommended). Restart DSH Web after installation, then open **Settings → Terminal**.
+Windows 远程连接需要启用 Windows OpenSSH Client(`ssh -V` 可检查);密码自动注入需要支持 `SSH_ASKPASS_REQUIRE=force` 的版本(建议 8.7+)。安装后重启 DSH Web，然后打开 **设置 → 终端**。
 
-## Quickstart
+## 快速开始
 
-### Local terminal
+### 本地终端
 
-1. Open the **Terminal** tab in the main area.
-2. Click **New** on the **Local terminal** row.
-3. Type commands and watch the live output.
+1. 打开主区域的 **终端** Tab。
+2. 在左侧 **本地终端** 行点击 **新建**。
+3. 输入命令并观察实时输出。
 
-The local terminal does not read remote profiles or SSH passwords.
+本地终端不会读取远程服务器档案或 SSH 密码。
 
-### Remote server
+### 远程服务器
 
-1. Open **Settings → Terminal → New**.
-2. Enter a name, host, port, and username.
-3. Choose password, private key, or `ssh-agent` authentication.
-4. Choose a permission level; keep `guarded` for a first connection.
-5. Return to the **Terminal** tab and click **Connect** on the server row.
+1. 打开 **设置 → 终端 → 新增**。
+2. 填写名称、主机、端口和用户名。
+3. 选择密码、私钥或 `ssh-agent` 认证。
+4. 选择权限等级，第一次使用建议保持 `guarded`。
+5. 回到 **终端** Tab，在服务器行点击 **连接**。
 
-A saved password is shown only as configured status and is never displayed again. On Windows, private-key auth uses a temporary copy protected by the current user's ACL; it is removed after the session, and the original key file and its ACL are left unchanged.
+密码保存后只显示“已设置”，不会再次回显。Windows 私钥认证会在当前用户 ACL 保护的临时目录创建副本供 OpenSSH 使用，连接结束后清理；原 OneDrive/私钥文件及其 ACL 不会修改。
 
-### Risky commands
+### 危险命令
 
-Commands are checked when you press Enter:
+命令在回车提交时检查：
 
-| Level | Behavior |
+| 等级 | 行为 |
 | --- | --- |
-| `open` | Everyday use; hard-deny rules still apply |
-| `guarded` (default) | High-risk commands pause for approval |
-| `locked` | Only explicitly allowed commands run directly |
+| `open` | 日常使用；除硬拦截规则外直接执行 |
+| `guarded`（默认） | 高风险命令暂停并等待确认 |
+| `locked` | 只有明确允许的命令可以直接执行 |
 
-For an `ask` command, choose **Run once**, **Always allow this command**, or **Deny**. A permanent allow applies only to the current server and exact command text.
+遇到 `ask` 命令时，选择 **执行一次**、**永久放行该命令** 或 **拒绝**。永久放行只对当前服务器和当前命令文本生效。
 
-## UI Preview
+## 界面预览
 
-![Terminal and dangerous-command confirmation](assets/terminal-en.png)
+![终端与危险命令确认（中文）](assets/terminal-zh.png)
 
-The terminal footer shows run, blocked, and allowed counts. Open **History** to review command records. Switching to another DSH tab does not disconnect a background session.
+终端底栏会显示执行、拦截和放行次数；点击 **历史** 可查看本会话的命令记录。切换到其他 DSH Tab 不会主动断开后台会话。
 
-## AI Tools
+## AI 工具
 
-The plugin exposes two model tools:
+插件提供两个模型工具：
 
-| Tool | Purpose |
+| 工具 | 用途 |
 | --- | --- |
-| `netshell_servers` | List server profiles without passwords |
-| `netshell_run` | Run one command on a selected server |
+| `netshell_servers` | 列出服务器档案，不返回密码 |
+| `netshell_run` | 在指定服务器上执行一条命令 |
 
-AI commands and human input use the same Guard. `deny` commands never run, and `ask` commands require a decision from you in the DSH confirmation UI or terminal panel. The AI cannot see passwords or forge approval results.
+AI 和人工输入共用同一套 Guard。`deny` 命令不会执行，`ask` 命令必须由你在 DSH 的确认卡或终端面板中裁决；AI 看不到密码，也不能伪造确认结果。
 
-On the first use of a server by a model session, or after the user manually disconnects that server, `netshell_run` asks for remote-connection approval before starting SSH. Approval is retained per model session and server for the current plugin lifetime; different model sessions must approve independently even when they reuse the same SSH session. A network failure, SSH exit, or connection timeout only triggers reconnection for the already-approved model session. A manually opened GUI session does not replace model approval. If the confirmation service is unavailable, the plugin fails closed and does not connect automatically.
+当前模型会话首次使用某台服务器，或用户手动断开该服务器后再次使用时，`netshell_run` 会先弹出远程连接确认；确认前不会启动 SSH。确认在当前插件生命周期内按模型会话和服务器分别保留；不同模型会话即使复用同一个 SSH 会话，也必须各自确认。网络故障、SSH 异常退出或连接等待超时只会触发当前模型会话的自动重连，不会再次询问。GUI 中已有的人工连接不会替代模型确认；确认服务不可用时插件会拒绝自动建连。
 
-## Security Boundary
+## 安全边界
 
-This is an operation guard, not a complete security sandbox. It protects commands entering through this plugin's terminal and `netshell_run`; SSH connections created by other plugins or generic shell tools are outside its scope. Use `locked` for sensitive environments and review actions inside interactive programs carefully.
+这是命令操作护栏，不是完整的安全沙箱。它只保护通过本插件终端和 `netshell_run` 进入的命令；其他插件或通用 Shell 工具建立的 SSH 连接不在拦截范围内。对敏感环境建议使用 `locked`，并审查交互式程序内部执行的操作。
 
-SSH host keys are stored in the plugin-private `$DSH_HOME/netshell/known_hosts` (falling back to `~/.dsh/netshell` when `DSH_HOME` is unset), separate from the user's `~/.ssh/known_hosts`.
+SSH 主机指纹保存在插件私有的 `$DSH_HOME/netshell/known_hosts`(未设置 `DSH_HOME` 时回退到 `~/.dsh/netshell`)，不会写入用户手工 SSH 使用的 `~/.ssh/known_hosts`。
 
-## Documentation
+## 文档
 
-- [中文 README](README.zh.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
-- [Updates](UPDATES.md) · [中文](UPDATES.zh.md)
-- [Technical notes](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
-- [Dynamic loading guide](DYNAMIC.md) · [中文](DYNAMIC.zh.md)
-- [Design and host-contract notes](DESIGN.zh.md)
-- [Full historical changelog](CHANGELOG.md)
+- [English README](README.en.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
+- [更新记录](UPDATES.zh.md) · [English](UPDATES.md)
+- [技术细节](TECHNICAL.zh.md) · [English](TECHNICAL.md)
+- [动态加载手册](DYNAMIC.zh.md) · [English](DYNAMIC.md)
+- [设计方案与宿主契约](DESIGN.zh.md)
+- [完整历史变更](CHANGELOG.md)
 
-## FAQ
+## 常见问题
 
-**What should I check when a connection fails?** Verify the host, port, username, and authentication method. If the host key changed, confirm the server was intentionally rebuilt before removing the stale entry from the plugin-private `known_hosts` file.
+**连接失败怎么办？** 检查主机、端口、用户名和认证方式。若提示主机指纹变化，确认服务器确已重装后，再按提示清理插件私有 `known_hosts` 记录。
 
-**Can the AI see my password?** No. The Host reads it from DSH's encrypted credential store only while establishing SSH; profile listings, tool results, logs, and terminal output never contain the password value.
+**密码会被 AI 看到吗？** 不会。密码由 Host 侧从 DSH 加密凭据库读取，只用于建立 SSH 连接；列表、工具返回、日志和终端输出都不包含密码值。

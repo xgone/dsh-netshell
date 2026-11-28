@@ -1,6 +1,6 @@
 # 更新记录
 
-这里记录面向使用者的功能更新。实现约束和接口变化请看 [TECHNICAL.md](TECHNICAL.md)，完整历史请看 [CHANGELOG.md](CHANGELOG.md)。
+这里记录面向使用者的功能更新。实现约束和接口变化请看 [TECHNICAL.zh.md](TECHNICAL.zh.md)，完整历史请看 [CHANGELOG.md](CHANGELOG.md)。
 
 ## DSH 兼容性说明
 

@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.zh.md">中文</a> · <a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <strong>한국어</strong></p>
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <strong>한국어</strong></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Guarded local and remote SSH terminal" width="720" />
@@ -104,7 +104,7 @@ SSH 호스트 키는 사용자의 `~/.ssh/known_hosts`와 분리된 플러그인
 
 ## 문서
 
-- [中文 README](README.zh.md) · [English README](README.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md)
+- [中文 README](README.md) · [English README](README.en.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md)
 - [업데이트](UPDATES.md) · [中文](UPDATES.zh.md)
 - [기술 노트](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [동적 로딩 가이드](DYNAMIC.md) · [中文](DYNAMIC.zh.md)
