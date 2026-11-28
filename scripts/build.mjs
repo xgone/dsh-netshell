@@ -240,36 +240,121 @@ mkdirSync(join(root, 'lib'), { recursive: true })
 
 // 文案表(`COPY`)键一致性:所有语言的键集合必须与 `en` 完全一致,
 // 新增语言时少翻一条就会在这里失败,而不是在界面上显示成原始 key。
+// 用一个只认「{ lang: { key: 'string' } }」扁平结构的静态解析器,不 eval 源码:
+// 它能跳过注释、发现重复键,也不会把源码当 JS 执行。
 function readCopyTable(source) {
   const marker = 'var COPY = {'
   const start = source.indexOf(marker)
   if (start < 0) throw new Error('源文件中找不到 COPY 表')
-  const open = source.indexOf('{', start)
-  let depth = 0
-  let end = -1
-  for (let i = open; i < source.length; i += 1) {
+  let i = source.indexOf('{', start)
+  const isIdStart = (c) => /[A-Za-z_$]/.test(c)
+  const isId = (c) => /[A-Za-z0-9_$]/.test(c)
+  const skipSpace = () => { while (i < source.length && /\s/.test(source[i])) i += 1 }
+  const skipComment = () => {
+    if (source[i] !== '/') return false
+    if (source[i + 1] === '/') {
+      while (i < source.length && source[i] !== '\n') i += 1
+      return true
+    }
+    if (source[i + 1] === '*') {
+      i += 2
+      while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) i += 1
+      i += 2
+      return true
+    }
+    return false
+  }
+  const skipBlank = () => { skipSpace(); while (skipComment()) skipSpace() }
+  const readIdent = () => {
+    if (!isIdStart(source[i])) {
+      throw new Error('COPY 表结构异常(位置 ' + i + '): ' + JSON.stringify(source.slice(i, i + 24)))
+    }
+    let out = ''
+    while (i < source.length && isId(source[i])) { out += source[i]; i += 1 }
+    return out
+  }
+  const readString = () => {
+    const quote = source[i]
+    i += 1
+    let out = ''
+    while (i < source.length) {
+      const ch = source[i]
+      if (ch === '\\') {
+        const next = source[i + 1]
+        if (next === 'n') out += '\n'
+        else if (next === 't') out += '\t'
+        else if (next === 'r') out += '\r'
+        else if (next === 'u') { out += String.fromCharCode(parseInt(source.slice(i + 2, i + 6), 16)); i += 4 }
+        else out += next
+        i += 2
+        continue
+      }
+      if (ch === quote) { i += 1; return out }
+      out += ch
+      i += 1
+    }
+    throw new Error('COPY 表字符串未闭合')
+  }
+  const expect = (ch) => {
+    skipBlank()
+    if (source[i] !== ch) {
+      throw new Error('COPY 表期望 ' + JSON.stringify(ch) + '(位置 ' + i + '): ' + JSON.stringify(source.slice(i, i + 24)))
+    }
+    i += 1
+  }
+
+  if (source[i] !== '{') throw new Error('COPY 表缺少起始括号')
+  i += 1
+  const copy = {}
+  const seen = {}
+  let lang = null
+  while (true) {
+    skipBlank()
+    if (i >= source.length) throw new Error('COPY 表括号不匹配')
     const ch = source[i]
-    if (ch === "'" || ch === '"') {
-      const quote = ch
-      for (i += 1; i < source.length && source[i] !== quote; i += 1) if (source[i] === '\\') i += 1
+    if (ch === '}') {
+      i += 1
+      if (lang === null) return copy
+      lang = null
       continue
     }
-    if (ch === '{') depth += 1
-    else if (ch === '}') {
-      depth -= 1
-      if (depth === 0) { end = i + 1; break }
+    if (ch === ',') { i += 1; continue }
+    if (lang === null) {
+      const name = readIdent()
+      if (copy[name]) throw new Error('COPY 表语言重复: ' + name)
+      expect(':')
+      expect('{')
+      copy[name] = {}
+      seen[name] = new Set()
+      lang = name
+      continue
     }
+    const key = readIdent()
+    if (seen[lang].has(key)) throw new Error('COPY.' + lang + ' 重复键: ' + key)
+    seen[lang].add(key)
+    expect(':')
+    skipBlank()
+    if (source[i] !== "'" && source[i] !== '"') {
+      throw new Error('COPY.' + lang + '.' + key + ' 的值必须是字符串字面量')
+    }
+    copy[lang][key] = readString()
   }
-  if (end < 0) throw new Error('COPY 表括号不匹配')
-  return new Function('return ' + source.slice(open, end))()
 }
 
 const copy = readCopyTable(clientSource)
 const languages = Object.keys(copy)
+if (languages.length < 2) throw new Error('COPY 至少需要 en 与一种其他语言')
 const baseline = Object.keys(copy.en || {}).sort()
 if (baseline.length === 0) throw new Error('COPY.en 为空')
 for (const lang of languages) {
-  const keys = Object.keys(copy[lang]).sort()
+  const table = copy[lang]
+  if (!table || typeof table !== 'object' || Array.isArray(table)) throw new Error('COPY.' + lang + ' 不是对象')
+  for (const key of baseline) {
+    if (typeof table[key] !== 'string' || table[key].length === 0) {
+      throw new Error('COPY.' + lang + '.' + key + ' 不是非空字符串')
+    }
+  }
+  const keys = Object.keys(table).sort()
   const missing = baseline.filter((key) => !keys.includes(key))
   const extra = keys.filter((key) => !baseline.includes(key))
   if (missing.length > 0 || extra.length > 0) {

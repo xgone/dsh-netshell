@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.zh.md">中文</a> · <a href="README.md">English</a> · <strong>Русский</strong></p>
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <strong>Русский</strong> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — защищённый локальный и удалённый SSH-терминал" width="720" />
@@ -15,7 +15,7 @@
 
 <p align="center"><strong>Защищённый локальный и удалённый SSH-терминал для DeepSeek Harness</strong></p>
 
-DSH-NetShell позволяет управлять серверами и работать в живом терминале внутри DSH, оставляя человеку понятную точку подтверждения перед выполнением опасных команд. Ручной ввод и действия ИИ проходят через один и тот же страж команд. Язык интерфейса следует локали DSH: китайский, английский или русский.
+DSH-NetShell позволяет управлять серверами и работать в живом терминале внутри DSH, оставляя человеку понятную точку подтверждения перед выполнением опасных команд. Ручной ввод и действия ИИ проходят через один и тот же страж команд. Язык интерфейса следует локали DSH: китайский, английский, русский, японский, немецкий, французский, испанский или корейский.
 
 ## Возможности
 
@@ -27,7 +27,7 @@ DSH-NetShell позволяет управлять серверами и раб�
 | Видимое выполнение | Ручной ввод и команды ИИ отображаются в одной живой панели терминала |
 | Изоляция учётных данных | Пароли SSH попадают только в зашифрованное хранилище DSH и не появляются в сообщениях ИИ, результатах инструментов и журналах |
 | История команд | Счётчики выполненных, заблокированных и разрешённых команд плюс запись по каждому решению |
-| Язык интерфейса | Китайский, английский или русский — вслед за локалью DSH |
+| Язык интерфейса | Китайский, английский, русский, японский, немецкий, французский, испанский или корейский — вслед за локалью DSH |
 
 ## Установка
 
@@ -104,7 +104,7 @@ dsh plugin --profile web add link:/path/to/dsh-netshell
 
 ## Документация
 
-- [中文 README](README.zh.md) · [English README](README.md)
+- [中文 README](README.md) · [English README](README.en.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
 - [История обновлений](UPDATES.md) · [中文](UPDATES.zh.md)
 - [Технические детали](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [Руководство по динамической загрузке](DYNAMIC.md) · [中文](DYNAMIC.zh.md)

@@ -2,12 +2,12 @@
 
 > Audience: engineers and AI agents taking part in development. Goal: after reading, you can modify the code safely.
 >
-> - For usage instructions see [README.md](README.md); for the original design and the host-contract research see [DESIGN.zh.md](DESIGN.zh.md) (note: DESIGN is the early-stage design; **where it differs from the implementation, §8.3 of this document and the source code prevail**).
+> - For usage instructions see [README.en.md](README.en.md) (the Chinese default README is [README.md](README.md)); for the original design and the host-contract research see [DESIGN.zh.md](DESIGN.zh.md) (note: DESIGN is the early-stage design; **where it differs from the implementation, §8.3 of this document and the source code prevail**).
 > - This repository is the plugin itself: there is no build step and no dependencies; the two files `nsh-host.js` + `nsh-client.js` are the entire product.
 
 ## 1. A Reading Guide for AI Agents
 
-**Reading order**: README → this document → DESIGN.zh.md (the host-contract part is still worth consulting) → source code.
+**Reading order**: README.en.md → this document → DESIGN.zh.md (the host-contract part is still worth consulting) → source code.
 
 **Three invariants you must know before changing code**:
 
@@ -29,10 +29,12 @@ The plugin has **two installation forms**, both driven by **the same source code
 | `lib/index.js` | Generated · Loader static host half (real Node ESM + harness shim + `/netshell/rpc` dispatch) |
 | `lib/client.js` | Generated · Loader static browser half (`window.__ModuleLoader__` factory + builtin shim) |
 | `cordis.patch.yml` | bundle patch: the `netshell` row of the loader tree |
-| `test/smoke.mjs` | End-to-end smoke test: stub services drive both generated halves + real HTTP RPC (12 assertions) |
+| `test/smoke.mjs` | End-to-end smoke test: stub services drive both generated halves + real HTTP RPC (23 assertions) |
+| `README.md` / `README.en.md` | Chinese default README and English README (plus `README.ru/ja/de/fr/es/ko.md`) |
+| `TECHNICAL.md` / `TECHNICAL.zh.md` | Technical notes (this document; Chinese original in `TECHNICAL.zh.md`) |
+| `DYNAMIC.md` / `DYNAMIC.zh.md` | Dynamic loading guide (English / Chinese) |
+| `UPDATES.md` / `UPDATES.zh.md` | User-facing update notes (English / Chinese) |
 | `DESIGN.zh.md` | Design document; the host-contract research in §9 is still valid |
-| `TECHNICAL.md` | This document |
-| `UPDATES.md` | User-facing update notes |
 | `CHANGELOG.md` | Complete history and implementation change log |
 
 Both `src/` files end with `var …; return { inject: [...], apply(ctx) { … } }` — this is the **dynamic-sandbox function-body evaluation** format; `build.mjs` inlines the whole source verbatim into a single IIFE, so there is only one copy of the business logic and all mode differences are confined to the shims of the generated products:
@@ -244,7 +246,7 @@ Run through this before changing code:
 - Configure `NPM_TOKEN` in the GitHub repository under `Settings → Secrets and variables → Actions`; it is injected only into the publish step.
 - When creating a GitHub Release, the Release tag, after stripping an optional `v` prefix, must exactly match `version` in `package.json`; otherwise the workflow fails before publishing.
 - `workflow_dispatch` allows manually publishing the package version on the current branch; `pnpm test` still runs before publishing.
-- The npm package's `files` allowlist includes the bilingual READMEs, the technical documentation and `assets/`, ensuring the documentation images on the npm page work.
+- The npm package's `files` allowlist includes all localized READMEs, the technical documentation and `assets/`, ensuring the documentation images on the npm page work.
 
 ## 13. Roadmap (DESIGN phases + technical debt surfaced by this document)
 

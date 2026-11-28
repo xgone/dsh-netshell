@@ -1,6 +1,6 @@
 # 更新记录(Changelog)
 
-本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。面向使用者的简明更新见 [UPDATES.md](UPDATES.md)。
+本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/),版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。面向使用者的简明更新见 [UPDATES.zh.md](UPDATES.zh.md)。
 
 ## [未发布]
 
@@ -8,14 +8,18 @@
 
 ### 新增
 
-- **客户端界面支持俄语(ru)**：`COPY` 文案表新增 `ru` 词典(93 条,与 `en` 键集合一致)。界面语言改为跟随 DSH 的 `locale` 服务:值以 `zh` 开头用中文、以 `ru` 开头用俄语、其余用英文(`copyLang()`),不再只区分中文与英文;`text()` 取不到对应词典时回落到英文。宿主侧文案(工具描述、Guard 规则说明、错误信息)不在此改动范围内,仍保持原有中文字符串。
-- **构建期校验文案表键一致**:`scripts/build.mjs` 新增 `readCopyTable()` 与键集合比对,任一语言的键缺失或多余都会让构建直接失败,避免新增语言时漏翻的条目在界面上显示成原始 key。
+- **客户端界面支持 8 种语言**:`COPY` 文案表在 `zh` / `en` 基础上新增 `ru` / `ja` / `de` / `fr` / `es` / `ko` 词典,各 93 条且键集合与 `en` 一致。界面语言跟随 DSH 的 `locale` 服务(`copyLang()` 按 BCP-47 语言子标签匹配,兼容大小写与 `zh_CN` 形式,3 字母语言码不会误判,取不到词典时回落英文);宿主侧文案(工具描述、Guard 规则说明、错误信息)仍保持中文,不在本次范围。
+- **构建期校验文案表**:`scripts/build.mjs` 新增静态 `readCopyTable()` 解析器与键一致性校验——跳过注释、发现重复键、要求值为非空字符串,任一语言的键缺失或多余都会让构建直接失败。
+
+### 修复
+
+- **locale 解析健壮性**:`copyLang()` 对 `localeService.getLocale()` 缺失或返回空值做防御,统一小写并按完整语言子标签匹配(`run` / `rup` 不再误判为俄语);新增 `test/locale.mjs` 覆盖 29 项 locale 断言并接入 `pnpm test`。
+- **界面文案拼接与排版**:规则命中提示、连接失败、编辑服务器标题补空格,两段规则帮助文字之间加分隔;规则动作下拉框宽度从 118 调整到 160(俄语标签不再被截断),俄语「连接」按钮改用动词 `Подключиться`。
 
 ### 文档
 
-- **英文文档成为默认入口**:`README.md`、`TECHNICAL.md`、`DYNAMIC.md`、`UPDATES.md` 改为英文版,中文原文保留为 `README.zh.md` / `TECHNICAL.zh.md` / `DYNAMIC.zh.md` / `UPDATES.zh.md`,并新增俄文 `README.ru.md`;三份 README 顶部互相链接。
-- 三份 README 的能力表补充「界面语言」一行,说明文案跟随 DSH 的界面语言(中文 / 英语 / 俄语)。
-- `package.json` 的 `files` 同步收录新增文档。
+- **文档入口与互链**:`README.md` 保持中文默认入口,英文版为 `README.en.md`;新增 `README.ru.md` / `README.ja.md` / `README.de.md` / `README.fr.md` / `README.es.md` / `README.ko.md`,八份 README 顶部语言切换互链。`TECHNICAL.md` / `DYNAMIC.md` / `UPDATES.md` 以英文为默认,中文原文保留为 `*.zh.md`,中英文档各自指向同语言版本;`CHANGELOG.md`、`DESIGN.zh.md` 等中文文档的互链同步修正。
+- 各语言 README 的能力表补充「界面语言」一行;`package.json` 的 `files` 同步收录全部 README 与文档。
 
 ## [0.6.6] - 2026-11-02
 
