@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <strong>Français</strong> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a> · <strong>Français</strong> · <a href="README.de.md">Deutsch</a> · <a href="README.ru.md">Русский</a> · <a href="README.pt.md">Português</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Terminal SSH local et distant avec garde-fou" width="720" />
@@ -15,7 +15,7 @@
 
 <p align="center"><strong>Un terminal SSH local et distant avec garde-fou pour DeepSeek Harness</strong></p>
 
-DSH-NetShell vous permet de gérer vos serveurs, de travailler dans un terminal en direct et de conserver un point de contrôle humain explicite avant l'exécution de commandes risquées dans DSH. La saisie humaine et les actions de l'IA passent par le même garde-fou de commandes. Les libellés de l'interface suivent la locale de l'interface DSH — chinois, anglais, russe, japonais, allemand, français, espagnol ou coréen.
+DSH-NetShell vous permet de gérer vos serveurs, de travailler dans un terminal en direct et de conserver un point de contrôle humain explicite avant l'exécution de commandes risquées dans DSH. La saisie humaine et les actions de l'IA passent par le même garde-fou de commandes. Les libellés de l'interface suivent la locale de l'interface DSH — chinois, anglais, japonais, espagnol, français, allemand, russe ou portugais.
 
 ## Points clés
 
@@ -27,7 +27,7 @@ DSH-NetShell vous permet de gérer vos serveurs, de travailler dans un terminal 
 | Exécution visible | La saisie humaine et les commandes de l'IA apparaissent dans le même panneau de terminal en direct |
 | Isolation des identifiants | Les mots de passe SSH restent dans le stockage chiffré de DSH et n'entrent jamais dans les messages de l'IA, les résultats d'outils ou les journaux |
 | Historique des commandes | Compteurs des commandes exécutées, bloquées et autorisées, plus l'enregistrement de chaque décision |
-| Langue de l'interface | Chinois, anglais, russe, japonais, allemand, français, espagnol ou coréen, selon la locale de l'interface DSH |
+| Langue de l'interface | Chinois, anglais, japonais, espagnol, français, allemand, russe ou portugais, selon la locale de l'interface DSH |
 
 ## Installation
 
@@ -104,7 +104,7 @@ Les clés d'hôte SSH sont stockées dans le fichier `$DSH_HOME/netshell/known_h
 
 ## Documentation
 
-- [中文 README](README.md) · [English README](README.en.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
+- [中文 README](README.md) · [English README](README.en.md) · [日本語 README](README.ja.md) · [Español README](README.es.md) · [Deutsch README](README.de.md) · [Русский README](README.ru.md) · [Português README](README.pt.md)
 - [Mises à jour](UPDATES.md) · [中文](UPDATES.zh.md)
 - [Notes techniques](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [Guide du chargement dynamique](DYNAMIC.md) · [中文](DYNAMIC.zh.md)

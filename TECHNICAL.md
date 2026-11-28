@@ -30,7 +30,7 @@ The plugin has **two installation forms**, both driven by **the same source code
 | `lib/client.js` | Generated · Loader static browser half (`window.__ModuleLoader__` factory + builtin shim) |
 | `cordis.patch.yml` | bundle patch: the `netshell` row of the loader tree |
 | `test/smoke.mjs` | End-to-end smoke test: stub services drive both generated halves + real HTTP RPC (23 assertions) |
-| `README.md` / `README.en.md` | Chinese default README and English README (plus `README.ru/ja/de/fr/es/ko.md`) |
+| `README.md` / `README.en.md` | Chinese default README and English README (plus `README.ru/ja/de/fr/es/pt.md`) |
 | `TECHNICAL.md` / `TECHNICAL.zh.md` | Technical notes (this document; Chinese original in `TECHNICAL.zh.md`) |
 | `DYNAMIC.md` / `DYNAMIC.zh.md` | Dynamic loading guide (English / Chinese) |
 | `UPDATES.md` / `UPDATES.zh.md` | User-facing update notes (English / Chinese) |

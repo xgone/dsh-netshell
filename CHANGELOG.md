@@ -8,7 +8,7 @@
 
 ### 新增
 
-- **客户端界面支持 8 种语言**:`COPY` 文案表在 `zh` / `en` 基础上新增 `ru` / `ja` / `de` / `fr` / `es` / `ko` 词典,各 93 条且键集合与 `en` 一致。界面语言跟随 DSH 的 `locale` 服务(`copyLang()` 按 BCP-47 语言子标签匹配,兼容大小写与 `zh_CN` 形式,3 字母语言码不会误判,取不到词典时回落英文);宿主侧文案(工具描述、Guard 规则说明、错误信息)仍保持中文,不在本次范围。
+- **客户端界面支持 8 种语言**:`COPY` 文案表在 `zh` / `en` 基础上新增 `ru` / `ja` / `de` / `fr` / `es` / `pt` 词典(语言集与 DSH 内置可选语言 zh/en/ja/es/fr/de/ru/pt 对齐),各 93 条且键集合与 `en` 一致。界面语言跟随 DSH 的 `locale` 服务(`copyLang()` 按 BCP-47 语言子标签匹配,兼容大小写与 `zh_CN` 形式,3 字母语言码不会误判,取不到词典时回落英文);宿主侧文案(工具描述、Guard 规则说明、错误信息)仍保持中文,不在本次范围。
 - **构建期校验文案表**:`scripts/build.mjs` 新增静态 `readCopyTable()` 解析器与键一致性校验——跳过注释、发现重复键、要求值为非空字符串,任一语言的键缺失或多余都会让构建直接失败。
 
 ### 修复
@@ -18,7 +18,7 @@
 
 ### 文档
 
-- **文档入口与互链**:`README.md` 保持中文默认入口,英文版为 `README.en.md`;新增 `README.ru.md` / `README.ja.md` / `README.de.md` / `README.fr.md` / `README.es.md` / `README.ko.md`,八份 README 顶部语言切换互链。`TECHNICAL.md` / `DYNAMIC.md` / `UPDATES.md` 以英文为默认,中文原文保留为 `*.zh.md`,中英文档各自指向同语言版本;`CHANGELOG.md`、`DESIGN.zh.md` 等中文文档的互链同步修正。
+- **文档入口与互链**:`README.md` 保持中文默认入口,英文版为 `README.en.md`;新增 `README.ru.md` / `README.ja.md` / `README.de.md` / `README.fr.md` / `README.es.md` / `README.pt.md`,八份 README 顶部语言切换互链。`TECHNICAL.md` / `DYNAMIC.md` / `UPDATES.md` 以英文为默认,中文原文保留为 `*.zh.md`,中英文档各自指向同语言版本;`CHANGELOG.md`、`DESIGN.zh.md` 等中文文档的互链同步修正。
 - 各语言 README 的能力表补充「界面语言」一行;`package.json` 的 `files` 同步收录全部 README 与文档。
 
 ## [0.6.6] - 2026-11-02

@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <strong>Deutsch</strong> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a> · <strong>Deutsch</strong> · <a href="README.ru.md">Русский</a> · <a href="README.pt.md">Português</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Bewachtes lokales und entferntes SSH-Terminal" width="720" />
@@ -15,7 +15,7 @@
 
 <p align="center"><strong>Ein bewachtes lokales und entferntes SSH-Terminal für DeepSeek Harness</strong></p>
 
-Mit DSH-NetShell verwalten Sie Server, nutzen ein Live-Terminal und behalten vor riskanten Befehlen in DSH einen klaren menschlichen Kontrollpunkt. Menschliche Eingaben und KI-Aktionen teilen sich denselben Befehls-Guard. Die Oberflächentexte folgen dem Locale der DSH-Oberfläche und sind in Chinesisch, Englisch, Russisch, Japanisch, Deutsch, Französisch, Spanisch und Koreanisch verfügbar.
+Mit DSH-NetShell verwalten Sie Server, nutzen ein Live-Terminal und behalten vor riskanten Befehlen in DSH einen klaren menschlichen Kontrollpunkt. Menschliche Eingaben und KI-Aktionen teilen sich denselben Befehls-Guard. Die Oberflächentexte folgen dem Locale der DSH-Oberfläche und sind in Chinesisch, Englisch, Japanisch, Spanisch, Französisch, Deutsch, Russisch und Portugiesisch verfügbar.
 
 ## Funktionen
 
@@ -27,7 +27,7 @@ Mit DSH-NetShell verwalten Sie Server, nutzen ein Live-Terminal und behalten vor
 | Sichtbare Ausführung | Menschliche Eingaben und KI-Befehle erscheinen im selben Live-Terminalbereich |
 | Isolierung der Anmeldedaten | SSH-Passwörter bleiben im verschlüsselten Speicher von DSH und gelangen nie in KI-Nachrichten, Tool-Ergebnisse oder Protokolle |
 | Befehlsverlauf | Zeigt Zähler für ausgeführte, blockierte und erlaubte Befehle sowie jeden Entscheidungseintrag |
-| Oberflächensprache | Chinesisch, Englisch, Russisch, Japanisch, Deutsch, Französisch, Spanisch und Koreanisch, entsprechend dem Locale der DSH-Oberfläche |
+| Oberflächensprache | Chinesisch, Englisch, Japanisch, Spanisch, Französisch, Deutsch, Russisch und Portugiesisch, entsprechend dem Locale der DSH-Oberfläche |
 
 ## Installation
 
@@ -104,7 +104,7 @@ SSH-Hostschlüssel werden in der plugin-privaten Datei `$DSH_HOME/netshell/known
 
 ## Dokumentation
 
-- [中文 README](README.md) · [English README](README.en.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
+- [中文 README](README.md) · [English README](README.en.md) · [日本語 README](README.ja.md) · [Español README](README.es.md) · [Français README](README.fr.md) · [Русский README](README.ru.md) · [Português README](README.pt.md)
 - [Aktualisierungen](UPDATES.md) · [中文](UPDATES.zh.md)
 - [Technische Hinweise](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [Leitfaden zum dynamischen Laden](DYNAMIC.md) · [中文](DYNAMIC.zh.md)
