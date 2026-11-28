@@ -28,11 +28,11 @@ const locales = [
   ['zh', 'zh'], ['zh-CN', 'zh'], ['zh-Hant', 'zh'], ['zh_CN', 'zh'], ['ZH-cn', 'zh'],
   ['ru', 'ru'], ['ru-RU', 'ru'], ['RU', 'ru'],
   ['ja', 'ja'], ['ja-JP', 'ja'],
-  ['ko', 'ko'], ['ko-KR', 'ko'],
+  ['pt', 'pt'], ['pt-BR', 'pt'],
   ['de', 'de'], ['de-DE', 'de'],
   ['fr', 'fr'], ['fr-FR', 'fr'],
   ['es', 'es'], ['es-419', 'es'],
-  ['en', 'en'], ['en-US', 'en'], ['pt-BR', 'en'],
+  ['en', 'en'], ['en-US', 'en'], ['it-IT', 'en'],
   // 3 字母语言码不能按 2 字母前缀误判成 ru
   ['run', 'en'], ['rup', 'en'],
   ['', 'en'], ['  ', 'en'],

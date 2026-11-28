@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ru.md">Русский</a> · <strong>日本語</strong> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <strong>日本語</strong> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.ru.md">Русский</a> · <a href="README.pt.md">Português</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Guarded local and remote SSH terminal" width="720" />
@@ -15,7 +15,7 @@
 
 <p align="center"><strong>DeepSeek Harness 向けの、ガード付きローカル / リモート SSH ターミナル</strong></p>
 
-DSH-NetShell を使うと、サーバーを管理し、ライブターミナルを利用し、危険なコマンドが DSH 上で実行される前に人のチェックポイントを明確に挟めます。人の入力と AI の操作は同じコマンドガードを共有します。UI の文言は DSH の UI ロケールに追従し、中国語、英語、ロシア語、日本語、ドイツ語、フランス語、スペイン語、韓国語に対応しています。
+DSH-NetShell を使うと、サーバーを管理し、ライブターミナルを利用し、危険なコマンドが DSH 上で実行される前に人のチェックポイントを明確に挟めます。人の入力と AI の操作は同じコマンドガードを共有します。UI の文言は DSH の UI ロケールに追従し、中国語、英語、日本語、スペイン語、フランス語、ドイツ語、ロシア語、ポルトガル語に対応しています。
 
 ## ハイライト
 
@@ -27,7 +27,7 @@ DSH-NetShell を使うと、サーバーを管理し、ライブターミナル�
 | 実行内容の可視化 | 人の入力も AI のコマンドも、同じライブターミナルパネルに表示されます |
 | 認証情報の分離 | SSH パスワードは DSH の暗号化ストアに留まり、AI のメッセージ、ツール結果、ログには入りません |
 | コマンド履歴 | 実行、ブロック、許可の件数と、すべての判断記録を確認できます |
-| インターフェース言語 | 中国語、英語、ロシア語、日本語、ドイツ語、フランス語、スペイン語、韓国語。DSH の UI ロケールに追従します |
+| インターフェース言語 | 中国語、英語、日本語、スペイン語、フランス語、ドイツ語、ロシア語、ポルトガル語。DSH の UI ロケールに追従します |
 
 ## インストール
 
@@ -104,7 +104,7 @@ SSH のホスト鍵は、ユーザーの `~/.ssh/known_hosts` とは別に、プ
 
 ## ドキュメント
 
-- [中文 README](README.md) · [English README](README.en.md) · [Русский README](README.ru.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
+- [中文 README](README.md) · [English README](README.en.md) · [Español README](README.es.md) · [Français README](README.fr.md) · [Deutsch README](README.de.md) · [Русский README](README.ru.md) · [Português README](README.pt.md)
 - [アップデート](UPDATES.md) · [中文](UPDATES.zh.md)
 - [技術ノート](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [動的読み込みガイド](DYNAMIC.md) · [中文](DYNAMIC.zh.md)

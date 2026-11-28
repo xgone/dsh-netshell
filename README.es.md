@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <strong>Español</strong> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="README.md">中文</a> · <a href="README.en.md">English</a> · <a href="README.ja.md">日本語</a> · <strong>Español</strong> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.ru.md">Русский</a> · <a href="README.pt.md">Português</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Guarded local and remote SSH terminal" width="720" />
@@ -15,7 +15,7 @@
 
 <p align="center"><strong>Un terminal SSH local y remoto con protección para DeepSeek Harness</strong></p>
 
-DSH-NetShell te permite gestionar servidores, usar un terminal en vivo y mantener un punto de control humano claro antes de que se ejecuten comandos de riesgo en DSH. La entrada humana y las acciones de la IA comparten la misma protección de comandos. Los textos de la interfaz siguen la configuración regional de DSH: chino, inglés, ruso, japonés, alemán, francés, español o coreano.
+DSH-NetShell te permite gestionar servidores, usar un terminal en vivo y mantener un punto de control humano claro antes de que se ejecuten comandos de riesgo en DSH. La entrada humana y las acciones de la IA comparten la misma protección de comandos. Los textos de la interfaz siguen la configuración regional de DSH: chino, inglés, japonés, español, francés, alemán, ruso o portugués.
 
 ## Aspectos destacados
 
@@ -27,7 +27,7 @@ DSH-NetShell te permite gestionar servidores, usar un terminal en vivo y mantene
 | Ejecución visible | La entrada humana y los comandos de la IA aparecen en el mismo panel de terminal en vivo |
 | Aislamiento de credenciales | Las contraseñas SSH permanecen en el almacén cifrado de DSH y nunca entran en mensajes de IA, resultados de herramientas ni registros |
 | Historial de comandos | Consulta los recuentos de ejecutados, bloqueados y permitidos, además de cada registro de decisión |
-| Idioma de la interfaz | Chino, inglés, ruso, japonés, alemán, francés, español o coreano, siguiendo la configuración regional de la interfaz de DSH |
+| Idioma de la interfaz | Chino, inglés, japonés, español, francés, alemán, ruso o portugués, siguiendo la configuración regional de la interfaz de DSH |
 
 ## Instalación
 
@@ -104,7 +104,7 @@ Las claves de host SSH se guardan en el archivo privado del plugin `$DSH_HOME/ne
 
 ## Documentación
 
-- [README 中文](README.md) · [README English](README.en.md) · [README Русский](README.ru.md) · [README 日本語](README.ja.md) · [README Deutsch](README.de.md) · [README Français](README.fr.md) · [README 한국어](README.ko.md)
+- [中文 README](README.md) · [English README](README.en.md) · [日本語 README](README.ja.md) · [Français README](README.fr.md) · [Deutsch README](README.de.md) · [Русский README](README.ru.md) · [Português README](README.pt.md)
 - [Actualizaciones](UPDATES.md) · [中文](UPDATES.zh.md)
 - [Notas técnicas](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [Guía de carga dinámica](DYNAMIC.md) · [中文](DYNAMIC.zh.md)

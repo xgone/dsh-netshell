@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><a href="README.md">中文</a> · <strong>English</strong> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
+<p align="center"><a href="README.md">中文</a> · <strong>English</strong> · <a href="README.ja.md">日本語</a> · <a href="README.es.md">Español</a> · <a href="README.fr.md">Français</a> · <a href="README.de.md">Deutsch</a> · <a href="README.ru.md">Русский</a> · <a href="README.pt.md">Português</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — Guarded local and remote SSH terminal" width="720" />
@@ -15,7 +15,7 @@
 
 <p align="center"><strong>A guarded local and remote SSH terminal for DeepSeek Harness</strong></p>
 
-DSH-NetShell lets you manage servers, use a live terminal, and keep a clear human checkpoint before risky commands run in DSH. Human input and AI actions share the same command guard. Interface copy follows the DSH UI locale — Chinese, English, Russian, Japanese, German, French, Spanish, or Korean.
+DSH-NetShell lets you manage servers, use a live terminal, and keep a clear human checkpoint before risky commands run in DSH. Human input and AI actions share the same command guard. Interface copy follows the DSH UI locale — Chinese, English, Japanese, Spanish, French, German, Russian, or Portuguese.
 
 ## Highlights
 
@@ -27,7 +27,7 @@ DSH-NetShell lets you manage servers, use a live terminal, and keep a clear huma
 | Visible execution | Human input and AI commands appear in the same live terminal panel |
 | Credential isolation | SSH passwords stay in DSH's encrypted store and never enter AI messages, tool results, or logs |
 | Command history | Review run, blocked, and allowed counts plus every decision record |
-| Interface language | Chinese, English, Russian, Japanese, German, French, Spanish, or Korean, following the DSH UI locale |
+| Interface language | Chinese, English, Japanese, Spanish, French, German, Russian, or Portuguese, following the DSH UI locale |
 
 ## Install
 
@@ -104,7 +104,7 @@ SSH host keys are stored in the plugin-private `$DSH_HOME/netshell/known_hosts` 
 
 ## Documentation
 
-- [中文 README](README.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
+- [中文 README](README.md) · [日本語 README](README.ja.md) · [Español README](README.es.md) · [Français README](README.fr.md) · [Deutsch README](README.de.md) · [Русский README](README.ru.md) · [Português README](README.pt.md)
 - [Updates](UPDATES.md) · [中文](UPDATES.zh.md)
 - [Technical notes](TECHNICAL.md) · [中文](TECHNICAL.zh.md)
 - [Dynamic loading guide](DYNAMIC.md) · [中文](DYNAMIC.zh.md)

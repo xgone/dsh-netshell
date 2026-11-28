@@ -30,7 +30,7 @@
 | `lib/client.js` | 生成物 · Loader 静态浏览器半区(`window.__ModuleLoader__` 工厂 + builtin shim) |
 | `cordis.patch.yml` | bundle 补丁:loader 树的 `netshell` 行 |
 | `test/smoke.mjs` | 端到端冒烟:桩服务驱动两个生成半区 + 真实 HTTP RPC(23 项断言) |
-| `README.md` / `README.en.md` | 中文默认 README 与英文 README(另有 `README.ru/ja/de/fr/es/ko.md`) |
+| `README.md` / `README.en.md` | 中文默认 README 与英文 README(另有 `README.ru/ja/de/fr/es/pt.md`) |
 | `TECHNICAL.zh.md` / `TECHNICAL.md` | 技术说明(本文为中文;英文默认见 `TECHNICAL.md`) |
 | `DYNAMIC.zh.md` / `DYNAMIC.md` | 动态加载手册(中 / 英) |
 | `UPDATES.zh.md` / `UPDATES.md` | 面向使用者的更新记录(中 / 英) |
