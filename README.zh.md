@@ -7,7 +7,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/xgone/dsh-netshell?label=license" alt="MIT license" /></a>
 </p>
 
-<p align="center"><strong>中文</strong> · <a href="README.md">English</a> · <a href="README.ru.md">Русский</a></p>
+<p align="center"><strong>中文</strong> · <a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.ja.md">日本語</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.es.md">Español</a> · <a href="README.ko.md">한국어</a></p>
 
 <p align="center">
   <img src="assets/social-preview.png" alt="DSH-NetShell — 受保护的本地与远程 SSH 终端" width="720" />
@@ -15,7 +15,7 @@
 
 <p align="center"><strong>面向 DeepSeek Harness 的受保护本地与远程 SSH 终端</strong></p>
 
-DSH-NetShell 让你在 DSH 中管理服务器、使用实时终端，并在危险命令执行前保留一个清晰的人工确认点。人工输入和 AI 操作共用同一套命令护栏。界面文案跟随 DSH 的界面语言:中文、英语或俄语。
+DSH-NetShell 让你在 DSH 中管理服务器、使用实时终端，并在危险命令执行前保留一个清晰的人工确认点。人工输入和 AI 操作共用同一套命令护栏。界面文案跟随 DSH 的界面语言:中文、英语、俄语、日语、德语、法语、西班牙语或韩语。
 
 ## 核心能力
 
@@ -27,7 +27,7 @@ DSH-NetShell 让你在 DSH 中管理服务器、使用实时终端，并在危�
 | 可见执行 | 人工输入和 AI 执行都实时显示在同一个终端面板 |
 | 凭据隔离 | SSH 密码只进入 DSH 加密凭据库，不进入 AI 消息、工具结果或日志 |
 | 命令历史 | 查看执行、拦截、放行计数和每条命令的裁决记录 |
-| 界面语言 | 中文、英语或俄语,跟随 DSH 的界面语言设置 |
+| 界面语言 | 中文、英语、俄语、日语、德语、法语、西班牙语或韩语,跟随 DSH 的界面语言设置 |
 
 ## 安装
 
@@ -104,7 +104,7 @@ SSH 主机指纹保存在插件私有的 `$DSH_HOME/netshell/known_hosts`(未设
 
 ## 文档
 
-- [English README](README.md) · [Русский README](README.ru.md)
+- [English README](README.md) · [Русский README](README.ru.md) · [日本語 README](README.ja.md) · [Deutsch README](README.de.md) · [Français README](README.fr.md) · [Español README](README.es.md) · [한국어 README](README.ko.md)
 - [更新记录](UPDATES.md) · [中文原文](UPDATES.zh.md)
 - [技术细节](TECHNICAL.md) · [中文原文](TECHNICAL.zh.md)
 - [动态加载手册](DYNAMIC.md) · [中文原文](DYNAMIC.zh.md)

@@ -10,12 +10,14 @@
 
 - **客户端界面支持俄语(ru)**：`COPY` 文案表新增 `ru` 词典(93 条,与 `en` 键集合一致)。界面语言改为跟随 DSH 的 `locale` 服务:值以 `zh` 开头用中文、以 `ru` 开头用俄语、其余用英文(`copyLang()`),不再只区分中文与英文;`text()` 取不到对应词典时回落到英文。宿主侧文案(工具描述、Guard 规则说明、错误信息)不在此改动范围内,仍保持原有中文字符串。
 - **构建期校验文案表键一致**:`scripts/build.mjs` 新增 `readCopyTable()` 与键集合比对,任一语言的键缺失或多余都会让构建直接失败,避免新增语言时漏翻的条目在界面上显示成原始 key。
+- **客户端界面支持日语(ja)、德语(de)、法语(fr)、西班牙语(es)、韩语(ko)**:`COPY` 新增五份词典(各 93 条,键集合与 `en` 一致);`copyLang()` 改为按 locale 前缀匹配 `zh / ru / ja / ko / de / fr / es`,其余回落英文,构建期键一致性校验覆盖全部 8 种语言。
 
 ### 文档
 
 - **英文文档成为默认入口**:`README.md`、`TECHNICAL.md`、`DYNAMIC.md`、`UPDATES.md` 改为英文版,中文原文保留为 `README.zh.md` / `TECHNICAL.zh.md` / `DYNAMIC.zh.md` / `UPDATES.zh.md`,并新增俄文 `README.ru.md`;三份 README 顶部互相链接。
 - 三份 README 的能力表补充「界面语言」一行,说明文案跟随 DSH 的界面语言(中文 / 英语 / 俄语)。
 - `package.json` 的 `files` 同步收录新增文档。
+- 新增 `README.ja.md` / `README.de.md` / `README.fr.md` / `README.es.md` / `README.ko.md`;八份 README 顶部语言切换互相链接,`package.json` 的 `files` 同步收录。
 
 ## [0.6.6] - 2026-11-02
 
