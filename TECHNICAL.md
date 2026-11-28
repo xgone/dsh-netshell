@@ -1,255 +1,255 @@
-# NetShell 技术细节(Technical Notes)
+# NetShell Technical Notes
 
-> 读者:参与开发的工程师与 AI agent。目标:读完能安全地修改代码。
+> Audience: engineers and AI agents taking part in development. Goal: after reading, you can modify the code safely.
 >
-> - 使用说明见 [README.md](README.md);原始设计与宿主契约调研见 [DESIGN.zh.md](DESIGN.zh.md)(注意:DESIGN 是前期设计,**与实现的差异以本文 §8.3 和源码为准**)。
-> - 本仓库即插件本体,没有构建步骤、没有依赖,`nsh-host.js` + `nsh-client.js` 两个文件就是全部产物。
+> - For usage instructions see [README.md](README.md); for the original design and the host-contract research see [DESIGN.zh.md](DESIGN.zh.md) (note: DESIGN is the early-stage design; **where it differs from the implementation, §8.3 of this document and the source code prevail**).
+> - This repository is the plugin itself: there is no build step and no dependencies; the two files `nsh-host.js` + `nsh-client.js` are the entire product.
 
-## 1. 给 AI Agent 的导读
+## 1. A Reading Guide for AI Agents
 
-**阅读顺序**:README → 本文 → DESIGN.zh.md(宿主契约部分仍有参考价值)→ 源码。
+**Reading order**: README → this document → DESIGN.zh.md (the host-contract part is still worth consulting) → source code.
 
-**改代码前必须知道的三条不变量**:
+**Three invariants you must know before changing code**:
 
-1. **跨 realm 对象规则**(§8.1)——违反会导致凭据写入报错或静默失败;
-2. RPC 方法名与 payload 是 Client / Host 两个半区之间的契约,改名必须两侧同步(§5);
-3. Guard 求值顺序(§6)与「密码不出 Host」是安全边界,任何重构不得弱化。
+1. **Cross-realm object rules** (§8.1) — violating them makes credential writes throw or fail silently;
+2. RPC method names and payloads are the contract between the Client and Host halves; renaming must be done on both sides in sync (§5);
+3. The Guard evaluation order (§6) and "passwords never leave the Host" are security boundaries that no refactor may weaken.
 
-## 2. 文件结构与双模式架构
+## 2. File Structure and the Dual-Mode Architecture
 
-> **分支模型**:`master` = Loader 发布形态,承载完整打包层(本节描述的全部文件以 master 为准);`dev` = 动态加载开发形态。两分支**文件同构**(dev 同样保留打包文件,以保证合并路径干净),差异仅来自文档与源码演进;在 dev 只修改 `src/` 源码与文档,打包与版本变更在 master 进行(合并后 `pnpm test` 重新生成 `lib/` 并提交)。
+> **Branching model**: `master` = the Loader release form, carrying the full packaging layer (every file described in this section is based on master); `dev` = the dynamic-loading development form. The two branches are **file-isomorphic** (dev likewise keeps the packaged files so that merge paths stay clean); differences come only from the evolution of docs and source. On dev, modify only the `src/` sources and the docs; packaging and version changes happen on master (after merging, `pnpm test` regenerates `lib/` and it is committed).
 
-本插件有**两种安装形态**,由**同一份源码**(`src/` 目录)驱动:
+The plugin has **two installation forms**, both driven by **the same source code** (the `src/` directory):
 
-| 文件 | 说明 |
+| File | Description |
 |------|------|
-| `src/nsh-host.js` | **源码 · 宿主半区**:SSH 会话管理、Guard 引擎、凭据读写、RPC handlers、模型工具(动态沙箱函数体风格,ES5) |
-| `src/nsh-client.js` | **源码 · 浏览器半区**:主区域终端 Tab(conversation.view)、设置页、ANSI 渲染、轮询(同上) |
-| `scripts/build.mjs` | 构建:把 `src/` 源码内联进 `lib/` 两个半区(`pnpm build`) |
-| `lib/index.js` | 生成物 · Loader 静态宿主半区(真实 Node ESM + harness shim + `/netshell/rpc` 分发) |
-| `lib/client.js` | 生成物 · Loader 静态浏览器半区(`window.__ModuleLoader__` 工厂 + builtin shim) |
-| `cordis.patch.yml` | bundle 补丁:loader 树的 `netshell` 行 |
-| `test/smoke.mjs` | 端到端冒烟:桩服务驱动两个生成半区 + 真实 HTTP RPC(12 项断言) |
-| `DESIGN.zh.md` | 设计方案,§9 的宿主契约调研仍有效 |
-| `TECHNICAL.md` | 本文 |
-| `UPDATES.md` | 面向使用者的更新记录 |
-| `CHANGELOG.md` | 完整历史与实现变更记录 |
+| `src/nsh-host.js` | **Source · host half**: SSH session management, Guard engine, credential read/write, RPC handlers, model tools (dynamic-sandbox function-body style, ES5) |
+| `src/nsh-client.js` | **Source · browser half**: main-area terminal tab (conversation.view), settings page, ANSI rendering, polling (same as above) |
+| `scripts/build.mjs` | Build: inlines the `src/` sources into the two halves under `lib/` (`pnpm build`) |
+| `lib/index.js` | Generated · Loader static host half (real Node ESM + harness shim + `/netshell/rpc` dispatch) |
+| `lib/client.js` | Generated · Loader static browser half (`window.__ModuleLoader__` factory + builtin shim) |
+| `cordis.patch.yml` | bundle patch: the `netshell` row of the loader tree |
+| `test/smoke.mjs` | End-to-end smoke test: stub services drive both generated halves + real HTTP RPC (12 assertions) |
+| `DESIGN.zh.md` | Design document; the host-contract research in §9 is still valid |
+| `TECHNICAL.md` | This document |
+| `UPDATES.md` | User-facing update notes |
+| `CHANGELOG.md` | Complete history and implementation change log |
 
-两个 `src/` 源文件均以 `var …; return { inject: [...], apply(ctx) { … } }` 结尾——这是**动态沙箱的函数体求值**格式;`build.mjs` 把整份源码原样内联进一个 IIFE,因此业务逻辑只有一份,模式差异全部收敛在生成物的 shim 里:
+Both `src/` files end with `var …; return { inject: [...], apply(ctx) { … } }` — this is the **dynamic-sandbox function-body evaluation** format; `build.mjs` inlines the whole source verbatim into a single IIFE, so there is only one copy of the business logic and all mode differences are confined to the shims of the generated products:
 
-| 动态沙箱 builtin | 静态模式落点(lib/index.js / lib/client.js) |
+| Dynamic-sandbox builtin | Static-mode counterpart (lib/index.js / lib/client.js) |
 |------|------|
-| `harness.handle(method, fn)` | 内存 handler 表 + 单一 `POST /netshell/rpc` JSON 分发(webServer 路由,先过 `connection.admit`) |
-| `harness.defineTool(def)` | 从 DSH host entry 解析宿主提供的 `@deepseek-ai/dsh-tools` 并调用 `defineTool`(参数 schema 归一化);将其作为 profile dependency 安装会因 hoisting 遮蔽兼容的宿主版本 |
+| `harness.handle(method, fn)` | In-memory handler table + a single `POST /netshell/rpc` JSON dispatch (webServer route, passing `connection.admit` first) |
+| `harness.defineTool(def)` | Resolves the host-provided `@deepseek-ai/dsh-tools` from the DSH host entry and calls `defineTool` (argument-schema normalization); installing it as a profile dependency would shadow the compatible host version through hoisting |
 | `harness.registerTool(ctx, t)` | `ctx.tools.register(t)` |
-| 客户端 `host.call(method, args)` | `fetch('netshell/rpc')`(document-relative,支持挂载前缀;与宿主同一分发端点) |
-| 客户端 `styles.insert(css)` | `<style>` 注入 `document.head` |
-| 客户端 `ctx.timer` | 客户端无 timer 服务,包装层以 `setInterval/setTimeout` 增广 ctx |
-| 服务名 `subprocess` / `credentials` / `timer` / `connection` | 同名——Web profile 的 base bundle 提供服务,静态 loader 额外声明 `connection` 用于 RPC 认证 |
+| client `host.call(method, args)` | `fetch('netshell/rpc')` (document-relative, supports mount prefixes; the same dispatch endpoint as the host) |
+| client `styles.insert(css)` | `<style>` injection into `document.head` |
+| client `ctx.timer` | The client has no timer service; the wrapper layer augments ctx with `setInterval/setTimeout` |
+| service names `subprocess` / `credentials` / `timer` / `connection` | Same names — the Web profile's base bundle provides the services, and the static loader additionally declares `connection` for RPC authentication |
 
-**改代码只改 `src/`,然后 `pnpm test`**(build + check + smoke)。`lib/` 是生成物但入库提交,保证 git clone / link 安装零构建步骤。
+**When changing code, change only `src/`, then run `pnpm test`** (build + check + smoke). `lib/` is a generated artifact but is committed, so installing via git clone / link needs zero build steps.
 
-## 3. 运行环境与宿主契约
+## 3. Runtime Environment and Host Contract
 
-- 插件运行在 DSH 的 **node:vm 沙箱 realm**:没有 `require`,不能引第三方库——这是所有选型(包装 ssh 二进制、自绘 ANSI、手写 store)的根本原因。
-- **Host** 动态函数体声明 `inject: ['subprocess', 'credentials', 'timer', 'connection']`;静态 loader 另外注入 `tools` / `webServer`。`connection` 只用于 Web RPC 认证,自定义路由在读取请求体前必须 `admit`,用到:
-  - `subprocess.spawnTerminal(spec)`:PTY 拉起交互式 `ssh`(会话);
-  - `subprocess.spawn(spec)`:跨平台 askpass helper 与私有 `known_hosts` 初始化/清理、`ssh -T` 一次性命令执行(工具路径);
-  - `subprocess.resolveExecutable('ssh')`:定位 ssh 二进制;
-  - `credentials.readRecord / modifyRecord / describe / resolve / set / unset`:档案与密码的持久化(§4);
-  - `harness.handle(method, fn)`:注册 RPC;`harness.defineTool` + `harness.registerTool`:注册模型工具;
-  - `timer.timeout / interval`:轮询与等待。
-- **Client** 可用:`React`(代码风格为 `var x = React.useState(...)` 解构前写法)、`host.call`、`styles.insert`、`ctx.get('slots')`、`ctx.get('locale')`、`console`;slots:`conversation.view`(主区域 Tab,list-kind,`data-conversation-composer-overlay` 定高模式)、`settings.section`(设置页)。
-- 交互终端固定 **120×32**(`COLS` / `ROWS`),resize 未实现;本地终端按 DSH 平台选择 shell,Windows 优先 `pwsh` / `powershell` / `cmd` 以避开常见 WSL `bash.exe` 启动器;远程 SSH 使用平台对应工作目录和 helper,Windows 通过 Win32 OpenSSH + DSH ConPTY 连接。Windows 密码自动注入依赖支持 `SSH_ASKPASS_REQUIRE=force` 的 OpenSSH(建议 8.7+)。
+- The plugin runs in DSH's **node:vm sandbox realm**: there is no `require` and no third-party library can be imported — this is the root reason behind every implementation choice (wrapping the ssh binary, hand-drawn ANSI, a hand-written store).
+- **Host**: the dynamic function body declares `inject: ['subprocess', 'credentials', 'timer', 'connection']`; the static loader additionally injects `tools` / `webServer`. `connection` is used only for Web RPC authentication, and a custom route must `admit` before reading the request body. It uses:
+  - `subprocess.spawnTerminal(spec)`: launch an interactive `ssh` on a PTY (sessions);
+  - `subprocess.spawn(spec)`: the cross-platform askpass helper, private `known_hosts` initialization/cleanup, and one-shot `ssh -T` command execution (the tool path);
+  - `subprocess.resolveExecutable('ssh')`: locate the ssh binary;
+  - `credentials.readRecord / modifyRecord / describe / resolve / set / unset`: persistence of profiles and passwords (§4);
+  - `harness.handle(method, fn)`: register RPC; `harness.defineTool` + `harness.registerTool`: register model tools;
+  - `timer.timeout / interval`: polling and waiting.
+- **Client** has available: `React` (code style is the pre-destructuring form `var x = React.useState(...)`), `host.call`, `styles.insert`, `ctx.get('slots')`, `ctx.get('locale')`, `console`; slots: `conversation.view` (main-area tab, list-kind, `data-conversation-composer-overlay` fixed-height mode), `settings.section` (settings page).
+- The interactive terminal is fixed at **120×32** (`COLS` / `ROWS`); resize is not implemented. Local terminals pick a shell per the DSH platform, with Windows preferring `pwsh` / `powershell` / `cmd` to avoid the common WSL `bash.exe` launcher; remote SSH uses the platform-appropriate working directory and helper, and on Windows connects via Win32 OpenSSH + DSH ConPTY. Windows automatic password injection depends on an OpenSSH that supports `SSH_ASKPASS_REQUIRE=force` (8.7+ recommended).
 
-## 4. 数据与持久化(为什么没有配置文件)
+## 4. Data and Persistence (Why There Is No Config File)
 
-**没有独立配置文件是刻意设计**:全部配置走宿主 `credentials` 服务,由宿主负责加密落盘(0600)、跨重启恢复,且密码与档案同域管理。
+**Having no separate config file is a deliberate design**: all configuration goes through the host `credentials` service; the host is responsible for encrypted on-disk storage (0600) and recovery across restarts, and passwords are managed in the same domain as profiles.
 
-| 数据 | 位置 | 形态 |
+| Data | Location | Form |
 |------|------|------|
-| 服务器档案 + 等级 + 规则 | 凭据记录 `netshell/profiles`(常量 `PKEY`)| `kind: 'grant'`,payload `{ version: 1, servers: [...] }` |
-| 密码 | 每服务器一条,ref 由 `refFor(id)` 生成:`NETSHELL_PW_<id 去掉非字母数字后大写>` | `credentials.set(ref, password)` |
-| 运行时会话 | Host 进程内存 `Map` | 插件停止 / DSH 重启即清空(会话本就不跨进程) |
-| 主机指纹(known_hosts) | 插件私有文件 `$DSH_HOME/netshell/known_hosts`(未设置 DSH_HOME 时回退到 `~/.dsh`) | POSIX 普通文件 0600 / 目录 0700;Windows 继承用户 DSH 目录 ACL,由 ssh 维护;与 `~/.ssh/known_hosts` 隔离 |
+| Server profiles + level + rules | Credential record `netshell/profiles` (constant `PKEY`) | `kind: 'grant'`, payload `{ version: 1, servers: [...] }` |
+| Password | One per server; the ref is generated by `refFor(id)`: `NETSHELL_PW_<id with non-alphanumerics removed, uppercased>` | `credentials.set(ref, password)` |
+| Runtime sessions | Host process memory `Map` | Cleared when the plugin stops / DSH restarts (sessions were never cross-process anyway) |
+| Host fingerprints (known_hosts) | Plugin-private file `$DSH_HOME/netshell/known_hosts` (falls back to `~/.dsh` when DSH_HOME is unset) | POSIX regular file 0600 / directory 0700; on Windows inherits the user DSH directory ACL and is maintained by ssh; isolated from `~/.ssh/known_hosts` |
 
-server 档案字段:`{ id, name, host, port, user, auth: 'password'|'key'|'agent', keyPath?, level: 'open'|'guarded'|'locked', rules: [{ pattern, action: 'allow'|'ask'|'deny', note? }], createdAt }`。
+Server profile fields: `{ id, name, host, port, user, auth: 'password'|'key'|'agent', keyPath?, level: 'open'|'guarded'|'locked', rules: [{ pattern, action: 'allow'|'ask'|'deny', note? }], createdAt }`.
 
-**密码隔离保证**:列表 / 保存接口返回时只附加 `hasPassword`(来自 `credentials.describe(ref).configured`);任何 RPC、任何日志、任何终端输出都不会出现密码值。
+**Password isolation guarantee**: the list / save responses only attach `hasPassword` (from `credentials.describe(ref).configured`); the password value never appears in any RPC, any log, or any terminal output.
 
-## 5. RPC 接口(Client → Host)
+## 5. RPC Interface (Client → Host)
 
-全部经 `harness.handle` 注册,参数 / 返回为 lossless JSON:
+All are registered via `harness.handle`; arguments / returns are lossless JSON:
 
-| method | args | 返回 | 说明 |
+| method | args | Returns | Description |
 |--------|------|------|------|
-| `netshell.profiles.list` | `{}` | `{ servers: [server & { hasPassword }] }` | 档案列表 |
-| `netshell.profiles.save` | `{ server, password?, clearPassword? }` | `{ server }` | 新建 / 更新;`password` 非空则写凭据,`clearPassword` 则删除;校验必填项与端口 1–65535 |
-| `netshell.profiles.delete` | `{ id }` | `{ ok: true }` | 删档案 + 删凭据 + 终止该服务器活跃会话 |
-| `netshell.connect` | `{ serverId }` | `{ id, pid }` | 每次都 spawn 新会话 |
-| `netshell.local.connect` | `{}` | `{ id, pid }` | 自动选择本机可用 shell 并创建独立本地会话 |
-| `netshell.input` | `{ id, data }` | `{ ok: true }` | 键盘输入,单次 ≤4096 字符;pending 期间整体丢弃;**内嵌 `\r`/`\n` 的多字符 data 强制拆段送入 Guard**(§6.1),不存在绕过拦截的输入形态 |
-| `netshell.poll` | `{ id }` | `{ status, output, lossy, dropped, nextCursor, events, pending, hint, closedReason, atPwPrompt, cols, rows }` | **全量快照**(见下) |
-| `netshell.decide` | `{ id, pendingId, action: 'allow'\|'always'\|'deny' }` | `{ ok: true }` | 对挂起命令做裁决;人工挂起(`from: 'line'`)按原行为向 PTY 写 `\r`/`\u0015`,工具挂起(`from: 'tool'`)只记账到确认令牌,不动 PTY |
-| `netshell.disconnect` | `{ id }` | `{ ok: true }` | 终止会话 |
-| `netshell.sessions.list` | `{}` | `{ sessions: [{ id, serverName, status, pending }] }` | 用于跨面板发现会话 |
+| `netshell.profiles.list` | `{}` | `{ servers: [server & { hasPassword }] }` | Profile list |
+| `netshell.profiles.save` | `{ server, password?, clearPassword? }` | `{ server }` | Create / update; a non-empty `password` writes the credential, `clearPassword` deletes it; validates required fields and the port range 1–65535 |
+| `netshell.profiles.delete` | `{ id }` | `{ ok: true }` | Delete the profile + delete the credential + terminate that server's active sessions |
+| `netshell.connect` | `{ serverId }` | `{ id, pid }` | Spawns a new session every time |
+| `netshell.local.connect` | `{}` | `{ id, pid }` | Automatically picks an available local shell and creates an independent local session |
+| `netshell.input` | `{ id, data }` | `{ ok: true }` | Keyboard input, ≤4096 characters per call; discarded entirely while pending; **multi-character data with embedded `\r`/`\n` is forcibly split and fed to the Guard** (§6.1), so no input shape can bypass interception |
+| `netshell.poll` | `{ id }` | `{ status, output, lossy, dropped, nextCursor, events, pending, hint, closedReason, atPwPrompt, cols, rows }` | **Full snapshot** (see below) |
+| `netshell.decide` | `{ id, pendingId, action: 'allow'\|'always'\|'deny' }` | `{ ok: true }` | Adjudicates a pending command; a manual pending (`from: 'line'`) writes `\r`/`\u0015` to the PTY as before, while a tool pending (`from: 'tool'`) only records against the confirmation token and does not touch the PTY |
+| `netshell.disconnect` | `{ id }` | `{ ok: true }` | Terminate the session |
+| `netshell.sessions.list` | `{}` | `{ sessions: [{ id, serverName, status, pending }] }` | Used for cross-panel session discovery |
 
-注意:
+Notes:
 
-- `netshell.poll` 目前是全量快照:`output` 为缓冲全文,`nextCursor` 恒为 `0`、`lossy` 恒为 `false`——增量游标是**预留字段**,未实现;
-- Client 采用**自适应轮询**(取代旧的 80ms 固定全局 interval):有会话时 80ms 拉当前会话快照(`pollOne(activeId)`)+ 约 1s 刷新会话列表(`discoverSessions`);**无任何会话时降为约 5s 探测一次**;页面隐藏(`document.visibilityState === 'hidden'`)时暂停全部轮询;打开终端视图或页面重新可见时立即补拉。列表请求串行化(在途未返回则跳过本轮),输入 RPC 完成后额外触发一次即时 poll。旧行为是插件一加载就每 80ms 发一次 `sessions.list`(12.5 次/秒、约 750 次/分钟),即使未连接任何主机 —— 这是本版修复的 RPC 放大问题。
+- `netshell.poll` is currently a full snapshot: `output` is the entire buffer, `nextCursor` is always `0` and `lossy` is always `false` — the incremental cursor is a **reserved field**, not implemented;
+- The Client uses **adaptive polling** (replacing the old fixed 80 ms global interval): with sessions present it pulls the current session snapshot every 80 ms (`pollOne(activeId)`) plus refreshes the session list roughly once per second (`discoverSessions`); **with no sessions at all it drops to a probe about every 5 s**; while the page is hidden (`document.visibilityState === 'hidden'`) it suspends all polling; opening the terminal view or the page becoming visible again triggers an immediate catch-up pull. List requests are serialized (if one is still in flight, that round is skipped), and a completed input RPC additionally triggers an immediate poll. The old behavior sent `sessions.list` every 80 ms from the moment the plugin loaded (12.5 times/second, about 750 times/minute), even with no host connected — that is the RPC amplification problem this version fixes.
 
-## 6. Guard 引擎(Host 侧)
+## 6. Guard Engine (Host Side)
 
-### 6.1 行缓冲与提交时机
+### 6.1 Line Buffer and Submission Timing
 
-`onInput` 维护当前行缓冲 `s.line`:
+`onInput` maintains the current line buffer `s.line`:
 
-- **回车**(`\r`)→ `submitEnter`:trim 后交给 `evaluateFor` 评估;空行与密码提示状态直接透传;
-- **Backspace**(`\x7f`)删一个字符;**Ctrl-U**(`\x15`)/ **Ctrl-C**(`\x03`)/ **Ctrl-L**(`\x0c`)清行;
-- **↑/↓**(`\x1b[A`/`\x1b[B`)在 Host 侧 `hist`(≤100 条)中回溯:先写 `\x15` 清掉远端当前行再回写内容,保证远端显示与缓冲一致;
-- **Tab** 与其余 ESC 序列直接透传(补全、vim 等不受 Guard 管);
-- **密码提示旁路**:`s.tail`(最近 60 字符)匹配 `/password\s*:$/i` 时置 `atPwPrompt`,此后回车直接透传不评估——否则 sudo / ssh 的密码输入会被当成命令送进 Guard;
-- **pending(待确认)期间**所有输入被丢弃;`deny` 裁决后写 `\x15` 复位远端行。
-- **多字符防绕过**(`feedMultiline`):合法浏览器客户端只发单键(回车是单独一条 `\r`),但协议层曾允许一条多字符 `data` 内嵌 `\r` 直达 PTY 绕过 Guard。现 `netshell.input` 对含 `\r`/`\n` 的 data 按 `[\r\n]` 拆段(`\r\n` 先归一),逐字符送 `onInput`、段间注入 `\r` 提交——每一段回车都走 `submitEnter` → `evaluateFor`,良性段照常执行、危险段照常挂起,与逐键输入语义等价。
+- **Enter** (`\r`) → `submitEnter`: after trimming, hand it to `evaluateFor` for evaluation; empty lines and the password-prompt state pass through directly;
+- **Backspace** (`\x7f`) deletes one character; **Ctrl-U** (`\x15`) / **Ctrl-C** (`\x03`) / **Ctrl-L** (`\x0c`) clear the line;
+- **↑/↓** (`\x1b[A`/`\x1b[B`) traverse the Host-side `hist` (≤100 entries): first write `\x15` to clear the remote current line, then write the content back, keeping the remote display consistent with the buffer;
+- **Tab** and the remaining ESC sequences pass through directly (completion, vim, etc. are not governed by the Guard);
+- **Password-prompt bypass**: when `s.tail` (the last 60 characters) matches `/password\s*:$/i`, `atPwPrompt` is set, after which Enter passes through without evaluation — otherwise sudo / ssh password input would be treated as a command and fed to the Guard;
+- **While pending (awaiting confirmation)** all input is discarded; after a `deny` verdict, `\x15` is written to reset the remote line.
+- **Multi-character bypass hardening** (`feedMultiline`): a legitimate browser client only sends single keys (Enter is a separate `\r`), but the protocol layer once allowed a single multi-character `data` with an embedded `\r` to reach the PTY directly and bypass the Guard. Now `netshell.input` splits data containing `\r`/`\n` on `[\r\n]` (normalizing `\r\n` first), feeds it character by character to `onInput`, and injects `\r` between segments to submit — every segment's Enter goes through `submitEnter` → `evaluateFor`, so benign segments still execute and dangerous segments are still held, semantically equivalent to per-key input.
 
-### 6.2 求值顺序(`evaluateFor`)
+### 6.2 Evaluation Order (`evaluateFor`)
 
-1. 服务器 `rules` 中 `action: 'deny'` 命中 → **deny**;
-2. 服务器 `rules` 其余(`allow` / `ask`)命中 → 按其 action;
-3. 内置 `deny` → 4. 内置 `ask` → 5. 等级默认(`guarded` → allow;`locked` → ask,即白名单模式;`open` 不会走到这里)。
+1. A hit with `action: 'deny'` in the server's `rules` → **deny**;
+2. A hit with the rest of the server's `rules` (`allow` / `ask`) → per its action;
+3. Built-in `deny` → 4. built-in `ask` → 5. level default (`guarded` → allow; `locked` → ask, i.e. allowlist mode; `open` never reaches here).
 
-### 6.3 匹配语义
+### 6.3 Matching Semantics
 
-- glob → 正则(`globToRe`,带缓存):`*` → `[\s\S]*`,`?` → `.`,其余字符转义;**整串匹配、忽略大小写**;
-- `variants()`:最多剥 3 层 `sudo|doas|nice|nohup|env ` 前缀,所有变体参与匹配;
-- 规则按数组顺序求值,首个命中生效;
-- 仅匹配原始命令串,不做 shell 词法解析(DESIGN 中「词法切分」未实现,见 §8.3)。
+- glob → regex (`globToRe`, with a cache): `*` → `[\s\S]*`, `?` → `.`, all other characters escaped; **whole-string match, case-insensitive**;
+- `variants()`: strips up to 3 layers of `sudo|doas|nice|nohup|env ` prefixes; all variants participate in matching;
+- Rules are evaluated in array order and the first hit wins;
+- Only the raw command string is matched; no shell lexical parsing is performed ("lexical tokenization" in DESIGN is not implemented, see §8.3).
 
-### 6.4 内置规则库
+### 6.4 Built-in Rule Library
 
-`BUILTIN_RULES` 共 38 条:9 条 `deny`(`rm -rf` 根路径及变体、`mkfs*`、`dd` 直写设备、覆写 `/dev/sd*`、fork 炸弹、`chmod -R 777 /*`)+ 29 条 `ask`(递归删除、关机重启、删库删表、强推硬重置、清防火墙、删 crontab、包管理卸载、docker/k8s 清理等)。修改时需同步 CHANGELOG 与 README。
+`BUILTIN_RULES` has 38 entries: 9 `deny` (`rm -rf` on root paths and variants, `mkfs*`, `dd` writing directly to devices, overwriting `/dev/sd*`, fork bombs, `chmod -R 777 /*`) + 29 `ask` (recursive delete, shutdown/reboot, dropping databases and tables, force push / hard reset, flushing the firewall, deleting crontab, package-manager removal, docker/k8s cleanup, etc.). When changing them, update CHANGELOG and README in sync.
 
-## 7. 会话生命周期与模型工具
+## 7. Session Lifecycle and Model Tools
 
-### 7.1 交互会话(`netshell.connect` → `spawnSession`)
+### 7.1 Interactive Sessions (`netshell.connect` → `spawnSession`)
 
-1. `resolveExecutable('ssh')` 定位二进制;
-2. `auth: 'password'` 时:`credentials.resolve(ref)` 取密码 → `makeAskpass` 写 askpass helper;`auth: 'key'` 在 Windows 上先把原私钥复制到仅当前用户可访问 ACL 的临时目录,并以托管文件流复制,不继承 OneDrive/原目录 ACL;
-3. `spawnTerminal` 拉起 `ssh -tt -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<私有文件> -o NumberOfPasswordPrompts=1 -o ServerAliveInterval=15 -o ConnectTimeout=12 …`(agent 加 `BatchMode=yes`;key 加 `-i <keyPath 或临时受限副本> -o IdentitiesOnly=yes`);
-   - **私有 known_hosts**(`knownHostsFile()`):首次调用幂等创建 `$DSH_HOME/netshell/known_hosts`(未设置 `DSH_HOME` 时回退到 `~/.dsh/netshell`)并缓存路径;POSIX 设置目录 0700、文件 0600,Windows 用 PowerShell 创建于 DSH 用户目录(继承该目录 ACL);失败可重试,失败则本次连接报错;插件学到的指纹不落入用户 `~/.ssh/known_hosts`;
-4. 异步消费输出流写 `onOutput`(检测错误特征设置中文 `hint`);首个输出块即置 `status: 'live'`;
-5. 退出时 `onExit` 记录 `closedReason` 并删除 askpass 脚本。
+1. `resolveExecutable('ssh')` locates the binary;
+2. When `auth: 'password'`: `credentials.resolve(ref)` fetches the password → `makeAskpass` writes the askpass helper; when `auth: 'key'` on Windows, the original private key is first copied to a temporary directory whose ACL is accessible only to the current user, using managed file streams, without inheriting OneDrive / source-directory ACLs;
+3. `spawnTerminal` launches `ssh -tt -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<private file> -o NumberOfPasswordPrompts=1 -o ServerAliveInterval=15 -o ConnectTimeout=12 …` (adds `BatchMode=yes` for agent; adds `-i <keyPath or temporary restricted copy> -o IdentitiesOnly=yes` for key);
+   - **Private known_hosts** (`knownHostsFile()`): the first call idempotently creates `$DSH_HOME/netshell/known_hosts` (falling back to `~/.dsh/netshell` when `DSH_HOME` is unset) and caches the path; on POSIX the directory is set to 0700 and the file to 0600, while on Windows it is created with PowerShell in the DSH user directory (inheriting that directory's ACL); a failure is retryable, and if it persists the connection for this attempt errors out; fingerprints the plugin learns never land in the user's `~/.ssh/known_hosts`;
+4. Asynchronously consumes the output stream into `onOutput` (detecting error signatures to set a Chinese-language `hint`); the first output chunk immediately sets `status: 'live'`;
+5. On exit, `onExit` records `closedReason` and deletes the askpass script.
 
-**askpass 机制**(密码认证):
+**askpass mechanism** (password authentication):
 
-- POSIX 需要 OpenSSH ≥ 8.4;脚本写到 `/tmp/.netshell-askpass-<nsToken>-<n>.sh`,内容仅 `printf "%s\n" "$NETSHELL_PW"`,以 0700 权限落盘;
-- Windows 使用 `%TEMP%` 下的 `.cmd` helper 调用 Windows PowerShell 输出 `NETSHELL_PW`;helper 文件本身不含密码,由当前 Windows 用户的临时目录 ACL 保护;
-- 两个平台的 ssh 进程均设置 `SSH_ASKPASS`、`SSH_ASKPASS_REQUIRE=force`、`DISPLAY=netshell:0` 和 `NETSHELL_PW`;Windows 自动密码注入建议使用 Win32 OpenSSH ≥ 8.7;
-- 会话结束时通过对应平台的文件工具删除临时 helper。
+- POSIX requires OpenSSH ≥ 8.4; the script is written to `/tmp/.netshell-askpass-<nsToken>-<n>.sh`, contains only `printf "%s\n" "$NETSHELL_PW"`, and is written to disk with 0700 permissions;
+- Windows uses a `.cmd` helper under `%TEMP%` that invokes Windows PowerShell to output `NETSHELL_PW`; the helper file itself contains no password and is protected by the current Windows user's temporary-directory ACL;
+- On both platforms the ssh process is given `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE=force`, `DISPLAY=netshell:0` and `NETSHELL_PW`; Windows automatic password injection is best with Win32 OpenSSH ≥ 8.7;
+- When the session ends, the temporary helper is deleted through the corresponding platform's file tooling.
 
-### 7.2 缓冲策略
+### 7.2 Buffering Strategy
 
-- `outAll` 上限 **160K** 字符,溢出裁到 120K;`outBase` 记录全局偏移、`dropped` 累计被裁字符数;
-- `events` 上限 500(溢出丢最旧 100);`hist`(命令历史)上限 100;
-- Client 侧 `lines` 上限 1200(溢出丢最旧 400 并累计 `dropped` 提示),实际渲染最近 400 行 + 当前行。
+- `outAll` is capped at **160K** characters; on overflow it is trimmed to 120K; `outBase` records the global offset and `dropped` accumulates the number of trimmed characters;
+- `events` is capped at 500 (on overflow the oldest 100 are dropped); `hist` (command history) is capped at 100;
+- On the Client side `lines` is capped at 1200 (on overflow the oldest 400 are dropped and a `dropped` notice is accumulated); rendering shows the most recent 400 lines plus the current line.
 
-### 7.3 模型工具
+### 7.3 Model Tools
 
-`harness.defineTool` 定义,`ctx.effect` 中注册、dispose 时反注册:
+Defined with `harness.defineTool`, registered inside `ctx.effect`, unregistered on dispose:
 
-- **`netshell_servers`**:无参数,读 `PKEY` 返回 `{ servers: [{ id, name, host, port, user, auth, level }] }`;
-- **`netshell_run`**:参数 `server`(必填)、`command`(必填)、`timeoutMs`(默认 30000);`confirmToken` 仅回退路径使用,`choice` 已废弃(授权只认真人裁决,参数被忽略)。执行流(`toolRunExecute`):
-  1. Guard 先评估硬拒绝规则:`deny` → 直接返回 blocked,不建立 SSH;其他命令进入模型连接确认流程;
-  2. 当前模型会话首次使用服务器,或用户主动断开后该会话的服务器授权已被清除时,经 `userQuestions.ask` 请求真人确认。授权在当前插件生命周期内按 Agent + 服务器保留;不同 Agent 即使复用同一个共享 SSH 会话也必须分别确认。网络/SSH 异常退出或连接等待超时只会使当前会话失效,已授权 Agent 下一次调用沿用授权自动重连。确认服务不可用时 fail closed,不自动连接;同一 Agent 的并发调用共享确认任务;
-  3. 确认通过后 `resolveServer` → `ensureSession`(**复用或新建交互 PTY 会话**,与面板共享,waitLive 最长 20s);
-  4. Guard 评估:`deny` → 直接返回 blocked;`allow` → `runRemote`(`ssh -T … <cmd>` 独立一次性执行,同样使用私有 known_hosts;stdout 上限 200K/spill 400K);
-  5. `ask` → 依次尝试四条路径:
-     - **路径一(令牌兑现)**:携 `confirmToken` 重跑时,校验一次性、服务器+命令绑定、`TOOL_ASK_TTL`(10 分钟)时效;面板已裁决 → 兑现执行,未裁决 → 返回 blocked 且**不消耗令牌**(模型可提醒用户后再试);
-     - **路径二(漏带令牌兑现)**:无令牌但存在 (服务器, 命令) 精确匹配且面板已裁决的记录 → 直接兑现;
-     - **路径三(首选 · 原生弹卡)**:直调宿主 `ctx.get('userQuestions').ask({ questions, agent: exec.agent, signal: exec.signal })`——与内置 `ask_user_question` 完全同一形态,确认卡原生弹在**对话窗口**,工具原地等待真人作答;答案由宿主服务返回,选「执行一次」→ `runRemote`、「永久放行该命令」→ 写规则表后 `runRemote`、其余(拒绝/自定义文本/空答案)一律按拒绝。**agent 必须原样透传 `exec.agent`(live Agent 对象)**:服务端做 `agents.get(agent.id) === agent` 全等校验,0.5.x 用 id 重建对象导致 `CALLER_NOT_LIVE` fail closed 是当年误诊为"宿主平面无法弹卡"的根因;`ASK_ABORTED` → aborted,`NO_PROVIDER` / `DELEGATED_CALLER` 等 → 路径四;
-     - **路径四(面板回退)**:共享会话置 `pending(from: 'tool', token)`(面板横幅可见)+ 签发一次性令牌返回 blocked;同一会话同时只允许一条挂起;`TOOL_ASK_TTL` 后 sweep 自动撤销挂起并作废令牌;
-  6. 结果(stdout/stderr/exitCode)与 `$ <cmd>` 一起**回写共享会话的 `outAll` 与事件流**,面板全程可见模型做了什么。
+- **`netshell_servers`**: no arguments; reads `PKEY` and returns `{ servers: [{ id, name, host, port, user, auth, level }] }`;
+- **`netshell_run`**: arguments `server` (required), `command` (required), `timeoutMs` (default 30000); `confirmToken` is used only by the fallback path, and `choice` is deprecated (authorization accepts only a human verdict, and the argument is ignored). Execution flow (`toolRunExecute`):
+  1. The Guard first evaluates the hard-deny rules: `deny` → return blocked immediately without establishing SSH; other commands enter the model connection-confirmation flow;
+  2. When the current model session uses a server for the first time, or when that session's authorization for the server was cleared after the user disconnected voluntarily, a human confirmation is requested via `userQuestions.ask`. Authorization is retained per Agent + server for the current plugin lifecycle; different Agents must each confirm separately even when they reuse the same shared SSH session. An abnormal network/SSH exit or a connection-wait timeout only invalidates the current session; an already-authorized Agent's next call reuses the authorization to reconnect automatically. When the confirmation service is unavailable it fails closed and does not connect automatically; concurrent calls from the same Agent share one confirmation task;
+  3. After confirmation passes, `resolveServer` → `ensureSession` (**reuse or create an interactive PTY session**, shared with the panel; waitLive up to 20 s);
+  4. Guard evaluation: `deny` → return blocked immediately; `allow` → `runRemote` (`ssh -T … <cmd>` as an independent one-shot execution, likewise using the private known_hosts; stdout capped at 200K/spill 400K);
+  5. `ask` → tries four paths in order:
+     - **Path one (token redemption)**: when re-run with a `confirmToken`, verifies one-shot use, the server+command binding, and `TOOL_ASK_TTL` (10 minutes) freshness; if the panel has adjudicated → redeem and execute, if not → return blocked and **do not consume the token** (the model can remind the user and retry);
+     - **Path two (redemption without a token)**: no token present, but a record with an exact (server, command) match exists and the panel has adjudicated it → redeem directly;
+     - **Path three (preferred · native card)**: calls the host's `ctx.get('userQuestions').ask({ questions, agent: exec.agent, signal: exec.signal })` directly — exactly the same shape as the built-in `ask_user_question`; the confirmation card appears natively in the **conversation window** and the tool waits in place for the human's answer; the answer is returned by the host service: "run once" → `runRemote`, "always allow this command" → write the rule table then `runRemote`, anything else (reject / custom text / empty answer) is treated as rejection. **The agent must be passed through verbatim as `exec.agent` (the live Agent object)**: the server performs the identity check `agents.get(agent.id) === agent`; rebuilding an object from the id in 0.5.x caused `CALLER_NOT_LIVE` fail-closed, and that was the root cause of the earlier misdiagnosis that "the host plane cannot show a card"; `ASK_ABORTED` → aborted, `NO_PROVIDER` / `DELEGATED_CALLER` etc. → path four;
+     - **Path four (panel fallback)**: sets the shared session to `pending(from: 'tool', token)` (visible in the panel banner) + issues a one-shot token and returns blocked; only one pending item is allowed per session at a time; after `TOOL_ASK_TTL` a sweep automatically revokes the pending item and invalidates the token;
+  6. The result (stdout/stderr/exitCode) together with `$ <cmd>` is **written back into the shared session's `outAll` and event stream**, so the panel can see throughout what the model did.
 
-  授权凭证只会来自真人操作(确认卡答案 / 面板 `netshell.decide` 点击),模型的 `choice` 参数不参与授权——这是机制性绑定,不依赖模型自觉。
+  Authorization credentials can only come from human actions (the confirmation-card answer / a panel `netshell.decide` click); the model's `choice` argument never participates in authorization — this is a mechanical binding, not something that depends on the model's good faith.
 
-## 8. 实现要点与坑
+## 8. Implementation Notes and Pitfalls
 
-### 8.1 跨 realm 对象身份(最重要的坑,源码顶部有大段注释)
+### 8.1 Cross-Realm Object Identity (the most important pitfall; there is a long comment block at the top of the source)
 
-插件跑在 node:vm 沙箱 realm,沙箱里对象字面量的 `Object.prototype` 与宿主 realm 不同;credentials 服务的 `assertJsonValue` 用**宿主的 Object.prototype 做全等比较**,直接传沙箱造的对象会失败。因此**一切要写进 GrantRecord payload 的对象,必须以宿主 realm 出身的对象为底**,只有三个安全来源:
+The plugin runs in the node:vm sandbox realm, where an object literal's `Object.prototype` differs from the host realm's; the credentials service's `assertJsonValue` compares with **the host's Object.prototype for identity equality**, so passing an object created in the sandbox fails. Therefore **every object destined for a GrantRecord payload must be based on an object born in the host realm**; there are only three safe sources:
 
-1. `credentials.describe()` 返回的 CredentialInfo(宿主对象)→ `hostBlank()` 删掉字段后当空白对象;
-2. `readRecord` 返回的 `rec.payload.servers`(宿主 YAML 解析产物)→ **原地修改**;
-3. RPC args 里的 server / rules(宿主 JSON 解析产物)→ **原地修改**。
+1. The CredentialInfo returned by `credentials.describe()` (a host object) → pass it through `hostBlank()` to delete its fields and use it as a blank object;
+2. `rec.payload.servers` returned by `readRecord` (the host's YAML parse product) → **modify in place**;
+3. The server / rules inside RPC args (the host's JSON parse product) → **modify in place**.
 
-数组判断用 `Array.isArray`(跨 realm 安全);原始值无 realm 概念,随意。新建 server 的标准流程:先 `hostBlank` 拿宿主空白对象 → push 进旧数组 → 原地填字段 → `modifyRecord` 返回整体。`decide('always')` 写永久放行规则时同理。
+Use `Array.isArray` for array checks (cross-realm safe); primitives have no realm concept and are unconstrained. The standard flow for creating a new server: first `hostBlank` to get a host blank object → push it into the old array → fill in the fields in place → `modifyRecord` returns the whole record. The same applies when `decide('always')` writes a permanent allow rule.
 
-### 8.2 死代码与预留字段
+### 8.2 Dead Code and Reserved Fields
 
-- `runOnSession`、`waitShellReady`、`collectOutput`(仅被前者调用)、`makeVirtualSession` 目前**没有调用方**——为将来「工具命令直接走交互 PTY」预留;
-- `netshell.poll` 的 `nextCursor` / `lossy` 为增量拉取预留,当前无效果。
+- `runOnSession`, `waitShellReady`, `collectOutput` (called only by the former), and `makeVirtualSession` currently have **no callers** — they are reserved for a future "tool commands go directly through the interactive PTY";
+- `netshell.poll`'s `nextCursor` / `lossy` are reserved for incremental fetching and currently have no effect.
 
-### 8.3 与 DESIGN.zh.md 的差异(以实现为准)
+### 8.3 Differences from DESIGN.zh.md (the Implementation Prevails)
 
-| 设计 | 实现 |
+| Design | Implementation |
 |------|------|
-| RPC 命名 `netshell.servers.*`、`sessionId` / `cursor` 增量拉取 | `netshell.profiles.*`、`id`、全量快照 poll |
-| 拦截询问走宿主 `userQuestions.ask()` | 插件在工具 ask 分支**直调** `userQuestions.ask`(agent 原样透传 `exec.agent`),确认卡弹对话窗口;弹卡不可用时回退「面板挂起 + 面板裁决兑现令牌」 |
-| 连接前探测 `ssh -V` 并降级 | 未做 |
-| 规则匹配做 shell 词法切分 | 仅原始串匹配 + sudo 类前缀剥离 |
-| 模型工具是 P3 可选项 | 已随首版交付(`netshell_servers` / `netshell_run`)|
+| RPC naming `netshell.servers.*`, `sessionId` / `cursor` incremental fetching | `netshell.profiles.*`, `id`, full-snapshot poll |
+| Interception queries go through the host `userQuestions.ask()` | The plugin **calls** `userQuestions.ask` directly in the tool's ask branch (agent passed through verbatim as `exec.agent`), and the confirmation card appears in the conversation window; when the card is unavailable it falls back to "panel pending + panel verdict redeems the token" |
+| Probe `ssh -V` before connecting and degrade | Not implemented |
+| Shell lexical tokenization for rule matching | Raw-string matching only + stripping of sudo-class prefixes |
+| Model tools are a P3 option | Delivered with the first version (`netshell_servers` / `netshell_run`) |
 
-### 8.4 安全边界与已知弱点
+### 8.4 Security Boundaries and Known Weaknesses
 
-- **护栏非沙箱**:匹配对象是原始命令串,base64 / 变量间接 / heredoc 等可绕过;`locked` + `allow` 白名单是唯一强约束,文档需持续向用户明示;
-- **Guard 只守「整行」**:进入交互式程序(python / mysql / vim `:!` / 嵌套 ssh)之后的操作不在评估范围,被评估的只有启动它的那一行;
-- **接管范围 = 本插件两条通道**:终端 UI 与 `netshell_run` 之外(如通用 shell 工具直接 `ssh`、其他插件 / MCP),命令不经本插件,插件无法也无处拦截——宿主 `subprocess` 服务不提供全局 spawn hook;
-- ask 的授权凭证机制性绑定真人操作:确认卡答案由宿主 `userQuestions.ask` 返回、面板裁决经 `netshell.decide` 记账,`choice` 参数不参与授权;
-- `netshell.input` 已做多字符防绕过(内嵌 `\r`/`\n` 拆段过 Guard),但 `\x15`/`\x7f` 等控制字符在行缓冲与远端 readline 间的语义差异理论上仍可构造出「Guard 看到的串 ≠ 远端执行的串」的混淆输入,归类为混淆变形类已知弱点;
-- `atPwPrompt` 是启发式:远端提示语不含 `password:` 时(如自定义 PAM 提示),密码回车可能落入评估路径,通常无副作用但会记一条历史;
-- host key 变更时由 ssh 自身拒绝连接(指纹记在私有 `$DSH_HOME/netshell/known_hosts`,未设置时回退 `~/.dsh/netshell`),`onOutput` 识别特征文案给出中文 hint 与善后指引;
-- 模型路径的 `waitLive` 是 120–150ms 轮询,非事件驱动(可接受,但不优雅)。
+- **The guardrail is not a sandbox**: the match target is the raw command string, so base64 / variable indirection / heredoc and the like can bypass it; `locked` + `allow` allowlisting is the only strong constraint, and the docs must keep making this explicit to users;
+- **The Guard only guards "whole lines"**: operations after entering an interactive program (python / mysql / vim `:!` / nested ssh) are outside the evaluation scope; only the line that starts it is evaluated;
+- **Scope of control = this plugin's two channels**: outside the terminal UI and `netshell_run` (for example a generic shell tool running `ssh` directly, other plugins / MCP), commands do not pass through this plugin, and the plugin can neither intercept them nor find a place to do so — the host `subprocess` service provides no global spawn hook;
+- ask's authorization credentials are mechanically bound to human actions: confirmation-card answers are returned by the host `userQuestions.ask`, panel verdicts are recorded via `netshell.decide`, and the `choice` argument does not participate in authorization;
+- `netshell.input` already hardens against multi-character bypass (embedded `\r`/`\n` is split and passed through the Guard), but the semantic differences of control characters such as `\x15`/`\x7f` between the line buffer and the remote readline still theoretically allow constructing obfuscated input where "the string the Guard sees ≠ the string the remote executes"; this is classified as a known weakness of the obfuscation/mutation kind;
+- `atPwPrompt` is a heuristic: when the remote prompt does not contain `password:` (for example a custom PAM prompt), the password Enter may fall into the evaluation path; this is usually harmless but records a history entry;
+- When the host key changes, ssh itself refuses the connection (fingerprints are stored in the private `$DSH_HOME/netshell/known_hosts`, falling back to `~/.dsh/netshell` when unset), and `onOutput` recognizes the characteristic text and gives a Chinese-language hint plus remediation guidance;
+- The model path's `waitLive` polls every 120–150 ms and is not event-driven (acceptable, but inelegant).
 
-## 9. Client 实现速览
+## 9. Client Implementation at a Glance
 
-- **状态**:`store` 为手写 observable(`set()` 浅拷贝 + 订阅通知),另有 `screens: Map<sessionId, screen>` 保存每个会话的渲染状态;组件经 `useStore()` 订阅强刷(整树 re-render,当前规模可接受)。
-- **ANSI 渲染**(`lineSpans`):逐单元格缓冲(字符 + 样式),处理 SGR(16 色 FG/BG + 粗体/斜体/下划线/删除线/暗淡)、`K`/`J` 清行清屏、`P`/`@`/`X` 字符删除/插入/擦除、`C`/`D`/`G`/`H`/`f` 光标定位与列移动、`s`/`u` 及 ESC 7/8 光标保存/恢复、`\r` 回车重绘、`\b`、`\t`(8 列制表)、BEL;剥除 OSC 与无显示意义控制符;相邻同样式合并为 span。无 xterm.js,这是精简自绘实现,完整光标重放(全屏 TUI)不支持。
-- **按键映射**(`keyToData`):DOM 键盘事件 → 终端字节流;Ctrl+字母 → `\x01`..`\x1a`,方向键 / Home / End / PgUp / PgDn → CSI 序列,Tab/Shift-Tab → `\t` / `\x1b[Z`;Alt / Meta 组合忽略;命中即 `preventDefault` 并 `netshell.input` 转发。
-- **样式**:CSS 模板串经 `styles.insert` 一次性注入;颜色全部走 `--dsw-*` 设计令牌(`TK` 映射表),自动适配深浅主题。
+- **State**: `store` is a hand-written observable (`set()` shallow copy + subscriber notification), plus `screens: Map<sessionId, screen>` holding each session's render state; components subscribe via `useStore()` and force a refresh (whole-tree re-render, acceptable at the current scale).
+- **ANSI rendering** (`lineSpans`): per-cell buffering (character + style), handling SGR (16-color FG/BG + bold/italic/underline/strikethrough/dim), `K`/`J` line and screen clearing, `P`/`@`/`X` character delete/insert/erase, `C`/`D`/`G`/`H`/`f` cursor positioning and column movement, `s`/`u` and ESC 7/8 cursor save/restore, `\r` carriage-return redraw, `\b`, `\t` (8-column tab stops), BEL; strips OSC and control characters with no display meaning; merges adjacent spans of the same style. No xterm.js: this is a streamlined hand-rolled implementation, and full cursor replay (full-screen TUI) is not supported.
+- **Key mapping** (`keyToData`): DOM keyboard events → terminal byte stream; Ctrl+letter → `\x01`..`\x1a`, arrows / Home / End / PgUp / PgDn → CSI sequences, Tab/Shift-Tab → `\t` / `\x1b[Z`; Alt / Meta combos are ignored; on a hit it calls `preventDefault` and forwards via `netshell.input`.
+- **Styles**: the CSS template string is injected once via `styles.insert`; all colors go through `--dsw-*` design tokens (the `TK` mapping table) and adapt automatically to light and dark themes.
 
-## 10. 修改检查单
+## 10. Change Checklist
 
-改代码前过一遍:
+Run through this before changing code:
 
-- [ ] 只改 `src/` 源码,改完 `pnpm test`(build + check + smoke),提交时包含重新生成的 `lib/`;
-- [ ] 新对象要进 credentials payload?→ 必须宿主 realm 出身(§8.1);
-- [ ] 动了 RPC 名 / payload?→ `src/nsh-client.js` 与 `src/nsh-host.js` 两侧同步 + 更新本文 §5;
-- [ ] 动了 Guard 求值顺序或内置规则?→ 更新 §6、README「权限等级」、CHANGELOG;
-- [ ] 动了 askpass / 凭据路径?→ 确认密码不出现在任何 RPC 返回、console、`outAll`;
-- [ ] 新增用户可见行为?→ README + CHANGELOG 同步;
-- [ ] 新增子资源(临时文件、子进程)?→ 在 `onExit` 与 `ctx.effect` dispose 中回收;
-- [ ] 动态源码保持 ES5 函数体风格(顶层 `var` + `return { inject, apply }`),不要引入 `import`/`export`/模板字符串——两种模式都靠「函数体原样内联」。
+- [ ] Change only the `src/` sources; after the change run `pnpm test` (build + check + smoke); include the regenerated `lib/` in the commit;
+- [ ] A new object needs to enter the credentials payload? → it must be born in the host realm (§8.1);
+- [ ] Touched an RPC name / payload? → sync both sides, `src/nsh-client.js` and `src/nsh-host.js`, and update §5 of this document;
+- [ ] Touched the Guard evaluation order or the built-in rules? → update §6, README "Permission levels", CHANGELOG;
+- [ ] Touched askpass / the credential path? → confirm the password does not appear in any RPC return, console, or `outAll`;
+- [ ] New user-visible behavior? → sync README + CHANGELOG;
+- [ ] New sub-resources (temporary files, child processes)? → reclaim them in `onExit` and in the `ctx.effect` dispose;
+- [ ] Keep the dynamic source in ES5 function-body style (top-level `var` + `return { inject, apply }`); do not introduce `import`/`export`/template literals — both modes rely on "inlining the function body verbatim".
 
-## 11. 安装与打包(loader 静态包)
+## 11. Installation and Packaging (loader static package)
 
-- **包形态**:`package.json` 声明 `exports["./client"]` + `dsh.client`(`platform: web`)+ `dsh.bundle.patch` —— 这是 DSH client-modules 系统扫描浏览器半区、以及 profile launcher 识别 bundle 的契约(参照:`@deepseek-ai/dsh-client-modules` 的扫描逻辑与本仓库 cordis.patch.yml)。注意 `dsh.client.inject` 的语义是**依赖的 client 包名**(模块表到达顺序边),而模块自身 `export const inject = [...]` 是**服务名**——两层不要混淆;本包前者为 `[]`(slots/react 由既有启动图提供)。
-- **安装**:本机 profile 是 `~/.dsh/profiles/web`(pnpm workspace,patch 层为其中的 `cordis.patch.yml`)。`dsh plugin --profile web add link:<路径>` 会 pnpm 安装并自动把 bundle 追加进 `dsh.profile.bundles`(透明转发 pnpm + 按安装状态对账);模块解析是双锚(先 dsh 安装目录、后 profile 目录)。
-- **宿主半区服务**:`inject: ['subprocess', 'credentials', 'timer', 'tools', 'webServer', 'connection']`(Web base bundle 提供同名服务行);RPC 走自注册 exact HTTP 路由,处理器先调用 `ctx.connection.admit({ headers: req.headers })` 再读取请求体,因此继承 DSH 的 Host/Origin 与浏览器认证门。Client 使用 document-relative `netshell/rpc`,支持 Web 应用挂载前缀。**有意未走** `/api` 通用平面:`namespace/<method>` 派发要求宿主半区 `TypertRemoteService` + `@Remote` 标记,且浏览器半区必须挂载 `@deepseek-ai/dsh-typert-generator` 生成的严格 codec 描述符(`./remote` 产物 + `ctx.remote.$mount`)—— machinery 过重,对本插件的 10 个 JSON RPC 不划算;若未来需要流式/强 schema,再迁。
-- **浏览器半区**:工厂形式 `window.__ModuleLoader__.load({ id, factory(require) })`,依赖经 `require('react')` 注入;不使用 `eval`/`new Function`,源码以真实代码内联(无 CSP 风险)。
+- **Package shape**: `package.json` declares `exports["./client"]` + `dsh.client` (`platform: web`) + `dsh.bundle.patch` — this is the contract by which the DSH client-modules system scans for browser halves and the profile launcher recognizes the bundle (see: the scanning logic of `@deepseek-ai/dsh-client-modules` and this repository's cordis.patch.yml). Note that `dsh.client.inject` means **the names of the client packages it depends on** (edges in module-table arrival order), whereas the module's own `export const inject = [...]` means **service names** — do not confuse the two layers; in this package the former is `[]` (slots/react are provided by the existing startup graph).
+- **Installation**: the local profile is `~/.dsh/profiles/web` (a pnpm workspace, whose patch layer is the `cordis.patch.yml` inside it). `dsh plugin --profile web add link:<path>` installs with pnpm and automatically appends the bundle to `dsh.profile.bundles` (a transparent pnpm passthrough plus reconciliation against install state); module resolution has two anchors (the dsh installation directory first, then the profile directory).
+- **Host-half services**: `inject: ['subprocess', 'credentials', 'timer', 'tools', 'webServer', 'connection']` (the Web base bundle provides service rows with the same names); RPC goes through a self-registered exact HTTP route, and the handler calls `ctx.connection.admit({ headers: req.headers })` before reading the request body, thereby inheriting DSH's Host/Origin and browser authentication gate. The Client uses the document-relative `netshell/rpc`, supporting Web app mount prefixes. **Deliberately not** going through the generic `/api` plane: `namespace/<method>` dispatch requires a host-half `TypertRemoteService` + `@Remote` markers, and the browser half must mount strict codec descriptors generated by `@deepseek-ai/dsh-typert-generator` (the `./remote` artifact + `ctx.remote.$mount`) — too much machinery, not worth it for this plugin's 10 JSON RPCs; migrate later if streaming / strong schemas are needed.
+- **Browser half**: factory form `window.__ModuleLoader__.load({ id, factory(require) })`, with dependencies injected via `require('react')`; no `eval`/`new Function`, and the source is inlined as real code (no CSP risk).
 
-## 12. npm 发布
+## 12. npm Publishing
 
-- 工作流位于 `.github/workflows/npm-publish.yml`。
-- 在 GitHub 仓库的 `Settings → Secrets and variables → Actions` 中配置 `NPM_TOKEN`，只在发布步骤注入。
-- 创建 GitHub Release 时，Release tag 去掉可选的 `v` 前缀后必须与 `package.json` 的 `version` 完全一致；否则工作流会在发布前失败。
-- `workflow_dispatch` 可手动发布当前分支上的包版本，发布前仍会执行 `pnpm test`。
-- npm 包的 `files` 白名单包含双语 README、技术文档和 `assets/`，保证 npm 页面中的文档图片可用。
+- The workflow lives at `.github/workflows/npm-publish.yml`.
+- Configure `NPM_TOKEN` in the GitHub repository under `Settings → Secrets and variables → Actions`; it is injected only into the publish step.
+- When creating a GitHub Release, the Release tag, after stripping an optional `v` prefix, must exactly match `version` in `package.json`; otherwise the workflow fails before publishing.
+- `workflow_dispatch` allows manually publishing the package version on the current branch; `pnpm test` still runs before publishing.
+- The npm package's `files` allowlist includes the bilingual READMEs, the technical documentation and `assets/`, ensuring the documentation images on the npm page work.
 
-## 13. 路线图(DESIGN 分期 + 本文暴露的技术债)
+## 13. Roadmap (DESIGN phases + technical debt surfaced by this document)
 
-- 增量 poll:启用 `nextCursor` 游标,减少带宽与面板 re-render;
-- 工具命令走交互 PTY:复活 `runOnSession`,让 `netshell_run` 真实回显交互(当前 allow 路径是独立 `ssh -T`);
-- `ssh -V` 探测与降级提示(补齐 DESIGN §8 风险对策);
-- `resize`、跳板机 ProxyJump、完整 ANSI 光标重放(全屏 TUI);
-- `terminals.registerBackend` 受控接入(显式开关)、清理或落地 §8.2 的预留代码。
+- Incremental poll: enable the `nextCursor` cursor to reduce bandwidth and panel re-renders;
+- Tool commands through the interactive PTY: revive `runOnSession` so that `netshell_run` truly echoes interactively (the current allow path is a standalone `ssh -T`);
+- `ssh -V` probing and downgrade hints (completing the risk mitigations of DESIGN §8);
+- `resize`, jump-host ProxyJump, full ANSI cursor replay (full-screen TUI);
+- Controlled `terminals.registerBackend` integration (behind an explicit switch), and cleaning up or landing the reserved code in §8.2.
